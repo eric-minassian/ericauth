@@ -1,0 +1,7 @@
+[package]
+name = "ericauth"
+version = "0.1.0"
+edition = "2021"
+authors = ["Eric Minassian <minassianeric2848@gmail.com>"]
+
+[dependencies]

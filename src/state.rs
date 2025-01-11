@@ -1,6 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use tokio::sync::Mutex;
+
+use crate::db::Database;
 
 pub type State = Arc<Mutex<_State>>;
 
@@ -9,11 +11,13 @@ pub fn initialize_state() -> State {
 }
 
 pub struct _State {
-    pub kv: HashMap<String, String>,
+    pub db: Database,
 }
 
 impl _State {
     pub fn new() -> Self {
-        Self { kv: HashMap::new() }
+        Self {
+            db: Database::new(),
+        }
     }
 }

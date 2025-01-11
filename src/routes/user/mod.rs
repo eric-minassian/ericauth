@@ -1,5 +1,7 @@
-use std::ops::DerefMut;
-
+use argon2::{
+    password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+    Argon2,
+};
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
@@ -8,12 +10,11 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::state;
+use crate::{db::Database, state};
 
 #[derive(Serialize, Deserialize)]
 pub struct UserPayload {
     email: String,
-    username: String,
     password: String,
 }
 
@@ -30,22 +31,60 @@ pub async fn user(
         return (StatusCode::BAD_REQUEST, "empty X-Forwarded-For header");
     }
 
-    if payload.email.is_empty() || payload.username.is_empty() || payload.password.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            "missing email, username or password",
-        );
+    // TODO: Rate limit the client
+
+    if payload.email.is_empty() || payload.password.is_empty() {
+        return (StatusCode::BAD_REQUEST, "missing email or password");
     }
 
-    if !payload.email.contains('@') || payload.email.len() >= 256 {
+    if !verify_email(&payload.email) {
         return (StatusCode::BAD_REQUEST, "invalid email");
     }
 
-    let mut pool = state.lock().await;
-    pool.deref_mut()
-        .kv
-        .insert("eric".to_string(), "Auth".to_string());
-    drop(pool);
+    {
+        let db = &state.lock().await.db;
+        if !check_email_availability(db, &payload.email) {
+            return (StatusCode::BAD_REQUEST, "email already in use");
+        }
+    }
+
+    if !verify_password_strength(&payload.password) {
+        return (StatusCode::BAD_REQUEST, "password too weak");
+    }
+
+    {
+        create_user(&mut state.lock().await.db, payload.email, &payload.password);
+    }
 
     (StatusCode::NO_CONTENT, "")
+}
+
+fn verify_email(email: &str) -> bool {
+    email.contains('@') && email.len() < 256
+}
+
+fn check_email_availability(db: &Database, email: &str) -> bool {
+    db.get_user(email).is_none()
+}
+
+fn verify_password_strength(password: &str) -> bool {
+    password.len() > 8
+}
+
+fn create_user(db: &mut Database, email: String, password: &str) {
+    let password_hash = hash_password(password);
+
+    db.insert_user(email, password_hash);
+}
+
+fn hash_password(password: &str) -> String {
+    let salt = SaltString::generate(&mut OsRng);
+
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+        .hash_password(password.as_bytes(), &salt)
+        .expect("Failed to hash password")
+        .to_string();
+
+    password_hash
 }

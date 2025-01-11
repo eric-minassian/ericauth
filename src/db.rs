@@ -31,4 +31,10 @@ impl Database {
     pub fn get_user(&self, email: &str) -> Option<&User> {
         self.users.get(email)
     }
+
+    pub fn get_password_hash(&self, email: &str) -> Option<&str> {
+        self.users
+            .get(email)
+            .map(|user| user.password_hash.as_str())
+    }
 }

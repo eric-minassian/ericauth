@@ -3,14 +3,13 @@ pub mod routes;
 pub mod state;
 
 use axum::{routing::post, Router};
-use routes::user;
 use state::initialize_state;
 
 #[tokio::main]
 async fn main() {
-    // build our application with a single route
     let app = Router::new()
-        .route("/user", post(user::user))
+        .route("/user", post(routes::user::user_handler))
+        .route("/login", post(routes::login::login_handler))
         .with_state(initialize_state());
 
     // run our app with hyper, listening globally on port 3000

@@ -18,7 +18,7 @@ pub struct UserPayload {
     password: String,
 }
 
-pub async fn user(
+pub async fn user_handler(
     State(state): State<state::State>,
     headers: HeaderMap,
     Json(payload): Json<UserPayload>,

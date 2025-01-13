@@ -1,53 +1,56 @@
-import { CfnOutput, Stack, StackProps } from "aws-cdk-lib";
-import { EndpointType, LambdaRestApi } from "aws-cdk-lib/aws-apigateway";
-import {
-  Certificate,
-  CertificateValidation,
-} from "aws-cdk-lib/aws-certificatemanager";
-import { ARecord, HostedZone, RecordTarget } from "aws-cdk-lib/aws-route53";
-import { ApiGateway } from "aws-cdk-lib/aws-route53-targets";
+import { Stack, StackProps } from "aws-cdk-lib";
+import { LambdaRestApi } from "aws-cdk-lib/aws-apigateway";
 import { RustFunction } from "cargo-lambda-cdk";
 import { Construct } from "constructs";
 import path = require("path");
 
 export class CdkStack extends Stack {
-  private readonly baseDomain = "ericminassian.com";
-  private readonly subDomain = "auth";
-
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    const hostedZone = HostedZone.fromLookup(this, "HostedZone", {
-      domainName: `${this.subDomain}.${this.baseDomain}`,
-    });
+    // const DOMAIN_NAME = "auth.ericminassian.com";
 
-    const certificate = new Certificate(this, "Certificate", {
-      domainName: `${this.subDomain}.${this.baseDomain}`,
-      validation: CertificateValidation.fromDns(hostedZone),
-    });
+    // const hostedZone = HostedZone.fromLookup(this, "HostedZone", {
+    //   domainName: DOMAIN_NAME,
+    // });
+
+    // const certificate = new Certificate(this, "Certificate", {
+    //   domainName: DOMAIN_NAME,
+    //   validation: CertificateValidation.fromDns(hostedZone),
+    // });
 
     const handler = new RustFunction(this, "eric-auth", {
       manifestPath: path.join(__dirname, "..", ".."),
     });
 
     const api = new LambdaRestApi(this, "Api", {
+      restApiName: "eric-auth",
       handler,
-      domainName: {
-        domainName: `${this.subDomain}.${this.baseDomain}`,
-        certificate,
-        endpointType: EndpointType.REGIONAL,
-      },
+      // domainName: {
+      //   domainName: DOMAIN_NAME,
+      //   certificate,
+      // },
+      proxy: false,
     });
 
-    new ARecord(this, "ARecord", {
-      zone: hostedZone,
-      recordName: this.subDomain,
-      target: RecordTarget.fromAlias(new ApiGateway(api)),
-    });
+    const health = api.root.addResource("health");
+    health.addMethod("GET");
 
-    new CfnOutput(this, "Url", {
-      value: `https://${this.subDomain}.${this.baseDomain}`,
-      description: "URL",
-    });
+    const users = api.root.addResource("users");
+    users.addMethod("POST");
+
+    const login = api.root.addResource("login");
+    login.addMethod("POST");
+
+    // new ARecord(this, "ARecord", {
+    //   zone: hostedZone,
+    //   recordName: DOMAIN_NAME,
+    //   target: RecordTarget.fromAlias(new ApiGateway(api)),
+    // });
+
+    // new CfnOutput(this, "Url", {
+    //   value: `https://${DOMAIN_NAME}`,
+    //   description: "URL",
+    // });
   }
 }

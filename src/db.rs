@@ -6,16 +6,14 @@ pub struct User {
     pub password_hash: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Database {
     users: HashMap<String, User>,
 }
 
 impl Database {
     pub fn new() -> Self {
-        Self {
-            users: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub fn insert_user(&mut self, email: String, password_hash: String) {

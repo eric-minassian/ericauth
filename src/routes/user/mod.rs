@@ -19,7 +19,7 @@ pub struct UserPayload {
 }
 
 pub async fn user_handler(
-    State(state): State<state::State>,
+    State(state): State<state::AppState>,
     headers: HeaderMap,
     Json(payload): Json<UserPayload>,
 ) -> impl IntoResponse {

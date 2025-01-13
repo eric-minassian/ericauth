@@ -4,20 +4,19 @@ use tokio::sync::Mutex;
 
 use crate::db::Database;
 
-pub type State = Arc<Mutex<_State>>;
+pub type AppState = Arc<Mutex<_AppState>>;
 
-pub fn initialize_state() -> State {
-    Arc::new(Mutex::new(_State::new()))
+pub fn initialize_state() -> AppState {
+    Arc::new(Mutex::new(_AppState::new()))
 }
 
-pub struct _State {
+#[derive(Default)]
+pub struct _AppState {
     pub db: Database,
 }
 
-impl _State {
+impl _AppState {
     pub fn new() -> Self {
-        Self {
-            db: Database::new(),
-        }
+        Self::default()
     }
 }

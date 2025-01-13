@@ -15,4 +15,6 @@ bootstrap:
 	npm install && \
 	npm run build && \
 	npm run cdk bootstrap -- --profile eric-auth
-	
+
+login:
+	aws sso login --sso-session ericminassian

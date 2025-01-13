@@ -16,7 +16,7 @@ pub struct LoginPayload {
 }
 
 pub async fn login_handler(
-    State(state): State<state::State>,
+    State(state): State<state::AppState>,
     headers: HeaderMap,
     Json(payload): Json<LoginPayload>,
 ) -> impl IntoResponse {
@@ -38,16 +38,14 @@ pub async fn login_handler(
         return (StatusCode::BAD_REQUEST, "invalid email");
     }
 
-    {
-        match &state.lock().await.db.get_password_hash(&payload.email) {
-            Some(password_hash) => {
-                if !verify_password_hash(&payload.password, password_hash) {
-                    return (StatusCode::UNAUTHORIZED, "invalid email or password");
-                }
+    match &state.lock().await.db.get_password_hash(&payload.email) {
+        Some(password_hash) => {
+            if !verify_password_hash(&payload.password, password_hash) {
+                return (StatusCode::UNAUTHORIZED, "invalid email or password");
             }
-            None => return (StatusCode::UNAUTHORIZED, "invalid email or password"),
         }
-    };
+        None => return (StatusCode::UNAUTHORIZED, "invalid email or password"),
+    }
 
     (StatusCode::NO_CONTENT, "")
 }

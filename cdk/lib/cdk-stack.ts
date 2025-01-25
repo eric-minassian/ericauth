@@ -1,23 +1,30 @@
 import { Stack, StackProps } from "aws-cdk-lib";
 import { LambdaRestApi } from "aws-cdk-lib/aws-apigateway";
+import {
+  Certificate,
+  CertificateValidation,
+} from "aws-cdk-lib/aws-certificatemanager";
+import { ARecord, HostedZone, RecordTarget } from "aws-cdk-lib/aws-route53";
+import { ApiGateway } from "aws-cdk-lib/aws-route53-targets";
 import { RustFunction } from "cargo-lambda-cdk";
 import { Construct } from "constructs";
+
 import path = require("path");
 
 export class CdkStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    // const DOMAIN_NAME = "auth.ericminassian.com";
+    const DOMAIN_NAME = "auth.ericminassian.com";
 
-    // const hostedZone = HostedZone.fromLookup(this, "HostedZone", {
-    //   domainName: DOMAIN_NAME,
-    // });
+    const hostedZone = HostedZone.fromLookup(this, "HostedZone", {
+      domainName: DOMAIN_NAME,
+    });
 
-    // const certificate = new Certificate(this, "Certificate", {
-    //   domainName: DOMAIN_NAME,
-    //   validation: CertificateValidation.fromDns(hostedZone),
-    // });
+    const certificate = new Certificate(this, "Certificate", {
+      domainName: DOMAIN_NAME,
+      validation: CertificateValidation.fromDns(hostedZone),
+    });
 
     const handler = new RustFunction(this, "eric-auth", {
       manifestPath: path.join(__dirname, "..", ".."),
@@ -26,10 +33,10 @@ export class CdkStack extends Stack {
     const api = new LambdaRestApi(this, "Api", {
       restApiName: "eric-auth",
       handler,
-      // domainName: {
-      //   domainName: DOMAIN_NAME,
-      //   certificate,
-      // },
+      domainName: {
+        domainName: DOMAIN_NAME,
+        certificate,
+      },
       proxy: false,
     });
 
@@ -42,15 +49,10 @@ export class CdkStack extends Stack {
     const login = api.root.addResource("login");
     login.addMethod("POST");
 
-    // new ARecord(this, "ARecord", {
-    //   zone: hostedZone,
-    //   recordName: DOMAIN_NAME,
-    //   target: RecordTarget.fromAlias(new ApiGateway(api)),
-    // });
-
-    // new CfnOutput(this, "Url", {
-    //   value: `https://${DOMAIN_NAME}`,
-    //   description: "URL",
-    // });
+    new ARecord(this, "ARecord", {
+      zone: hostedZone,
+      recordName: DOMAIN_NAME,
+      target: RecordTarget.fromAlias(new ApiGateway(api)),
+    });
   }
 }

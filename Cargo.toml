@@ -6,6 +6,8 @@ authors = ["Eric Minassian <minassianeric2848@gmail.com>"]
 
 [dependencies]
 argon2 = "0.5.3"
+aws-config = { version = "1.5.15", features = ["behavior-version-latest"] }
+aws-sdk-dynamodb = "1.62.0"
 axum = "0.8.1"
 lambda_http = "0.14.0"
 rand_core = { version = "0.6.4", features = ["std"] }

@@ -9,7 +9,10 @@ async fn main() -> Result<(), Error> {
 
     set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
 
-    let app = routes().with_state(initialize_state());
+    let config = aws_config::load_from_env().await;
+    let ddb_client = aws_sdk_dynamodb::Client::new(&config);
+
+    let app = routes().with_state(initialize_state(ddb_client));
 
     run(app).await
 }

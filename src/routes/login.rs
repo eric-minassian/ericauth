@@ -38,7 +38,14 @@ pub async fn login_handler(
         return (StatusCode::BAD_REQUEST, "invalid email");
     }
 
-    match &state.lock().await.db.get_password_hash(&payload.email) {
+    match &state
+        .lock()
+        .await
+        .db
+        .get_password_hash(&payload.email)
+        .await
+        .unwrap()
+    {
         Some(password_hash) => {
             if !verify_password_hash(&payload.password, password_hash) {
                 return (StatusCode::UNAUTHORIZED, "invalid email or password");

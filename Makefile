@@ -8,13 +8,13 @@ deploy:
 	cd cdk && \
 	npm install && \
 	npm run build && \
-	npm run cdk deploy -- --require-approval never --profile eric-auth
+	npm run cdk deploy -- --require-approval never
 
 bootstrap:
 	cd cdk && \
 	npm install && \
 	npm run build && \
-	npm run cdk bootstrap -- --profile eric-auth
+	npm run cdk bootstrap
 
 login:
 	aws sso login --sso-session ericminassian

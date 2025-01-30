@@ -43,7 +43,7 @@ pub async fn user_handler(
 
     {
         let db = &state.lock().await.db;
-        if !check_email_availability(db, &payload.email) {
+        if !check_email_availability(db, &payload.email).await {
             return (StatusCode::BAD_REQUEST, "email already in use");
         }
     }
@@ -53,7 +53,7 @@ pub async fn user_handler(
     }
 
     {
-        create_user(&mut state.lock().await.db, payload.email, &payload.password);
+        create_user(&mut state.lock().await.db, payload.email, &payload.password).await;
     }
 
     (StatusCode::NO_CONTENT, "")
@@ -63,18 +63,18 @@ fn verify_email(email: &str) -> bool {
     email.contains('@') && email.len() < 256
 }
 
-fn check_email_availability(db: &Database, email: &str) -> bool {
-    db.get_user(email).is_none()
+async fn check_email_availability(db: &Database, email: &str) -> bool {
+    db.get_user(email).await.unwrap().is_none()
 }
 
 fn verify_password_strength(password: &str) -> bool {
     password.len() > 8
 }
 
-fn create_user(db: &mut Database, email: String, password: &str) {
+async fn create_user(db: &mut Database, email: String, password: &str) {
     let password_hash = hash_password(password);
 
-    db.insert_user(email, password_hash);
+    db.insert_user(email, password_hash).await;
 }
 
 fn hash_password(password: &str) -> String {

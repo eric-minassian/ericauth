@@ -42,12 +42,12 @@ pub async fn login_handler(
         .lock()
         .await
         .db
-        .get_password_hash(&payload.email)
+        .get_user(&payload.email)
         .await
         .unwrap()
     {
-        Some(password_hash) => {
-            if !verify_password_hash(&payload.password, password_hash) {
+        Some(user) => {
+            if !verify_password_hash(&payload.password, &user.password_hash) {
                 return (StatusCode::UNAUTHORIZED, "invalid email or password");
             }
         }

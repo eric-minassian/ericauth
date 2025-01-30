@@ -4,6 +4,7 @@ import {
   Certificate,
   CertificateValidation,
 } from "aws-cdk-lib/aws-certificatemanager";
+import { AttributeType, TableV2 } from "aws-cdk-lib/aws-dynamodb";
 import { ARecord, HostedZone, RecordTarget } from "aws-cdk-lib/aws-route53";
 import { ApiGateway } from "aws-cdk-lib/aws-route53-targets";
 import { RustFunction } from "cargo-lambda-cdk";
@@ -26,9 +27,16 @@ export class CdkStack extends Stack {
       validation: CertificateValidation.fromDns(hostedZone),
     });
 
+    const usersTable = new TableV2(this, "UsersTable", {
+      tableName: "UsersTable",
+      partitionKey: { name: "email", type: AttributeType.STRING },
+    });
+
     const handler = new RustFunction(this, "eric-auth", {
       manifestPath: path.join(__dirname, "..", ".."),
     });
+
+    usersTable.grantReadWriteData(handler);
 
     const api = new LambdaRestApi(this, "Api", {
       restApiName: "eric-auth",
@@ -43,7 +51,7 @@ export class CdkStack extends Stack {
     const health = api.root.addResource("health");
     health.addMethod("GET");
 
-    const users = api.root.addResource("users");
+    const users = api.root.addResource("user");
     users.addMethod("POST");
 
     const login = api.root.addResource("login");

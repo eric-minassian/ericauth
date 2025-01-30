@@ -1,5 +1,5 @@
-import { Stack, StackProps } from "aws-cdk-lib";
-import { LambdaRestApi } from "aws-cdk-lib/aws-apigateway";
+import { RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
+import { LambdaIntegration, RestApi } from "aws-cdk-lib/aws-apigateway";
 import {
   Certificate,
   CertificateValidation,
@@ -30,32 +30,37 @@ export class CdkStack extends Stack {
     const usersTable = new TableV2(this, "UsersTable", {
       tableName: "UsersTable",
       partitionKey: { name: "email", type: AttributeType.STRING },
+      removalPolicy: RemovalPolicy.RETAIN,
     });
 
-    const handler = new RustFunction(this, "eric-auth", {
+    const healthHandler = new RustFunction(this, "HealthFunction", {
       manifestPath: path.join(__dirname, "..", ".."),
+      binaryName: "health",
     });
 
-    usersTable.grantReadWriteData(handler);
+    const loginHandler = new RustFunction(this, "LoginFunction", {
+      manifestPath: path.join(__dirname, "..", ".."),
+      binaryName: "login",
+    });
 
-    const api = new LambdaRestApi(this, "Api", {
+    usersTable.grantReadWriteData(loginHandler);
+
+    const api = new RestApi(this, "Api", {
       restApiName: "eric-auth",
-      handler,
       domainName: {
         domainName: DOMAIN_NAME,
         certificate,
       },
-      proxy: false,
     });
 
     const health = api.root.addResource("health");
-    health.addMethod("GET");
+    health.addMethod("GET", new LambdaIntegration(healthHandler));
 
-    const users = api.root.addResource("user");
-    users.addMethod("POST");
+    // const users = api.root.addResource("user");
+    // users.addMethod("POST");
 
     const login = api.root.addResource("login");
-    login.addMethod("POST");
+    login.addMethod("POST", new LambdaIntegration(loginHandler));
 
     new ARecord(this, "ARecord", {
       zone: hostedZone,

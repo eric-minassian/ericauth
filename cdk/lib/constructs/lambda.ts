@@ -11,7 +11,12 @@ export class Lambdas extends Construct {
   public readonly signupHandler: RustFunction;
   public readonly loginHandler: RustFunction;
 
-  constructor(scope: Construct, id: string, usersTable: TableV2) {
+  constructor(
+    scope: Construct,
+    id: string,
+    usersTable: TableV2,
+    sessionsTable: TableV2
+  ) {
     super(scope, id);
 
     this.healthHandler = new RustFunction(this, "HealthFunction", {
@@ -31,5 +36,8 @@ export class Lambdas extends Construct {
 
     usersTable.grantReadWriteData(this.signupHandler);
     usersTable.grantReadWriteData(this.loginHandler);
+
+    sessionsTable.grantReadWriteData(this.signupHandler);
+    sessionsTable.grantReadWriteData(this.loginHandler);
   }
 }

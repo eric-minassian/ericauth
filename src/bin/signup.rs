@@ -4,7 +4,10 @@ use argon2::{
     password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
     Argon2,
 };
-use ericauth::{get_user, insert_user};
+use ericauth::{
+    get_user, insert_user,
+    session::{create_session, generate_session_token},
+};
 use lambda_http::{
     http::StatusCode, run, service_fn, tracing, Error, IntoResponse, Request, RequestPayloadExt,
 };
@@ -60,6 +63,11 @@ async fn function_handler(event: Request) -> Result<impl IntoResponse, Error> {
     let password_hash = hash_password(&body.password)?;
 
     insert_user(&ddb_client, body.email, password_hash).await?;
+
+    // let session_token = generate_session_token().await?;
+    // let sessions = create_session(&ddb_client, session_token, user_id, flags)
+    //     .await
+    //     .unwrap();
 
     Ok((StatusCode::NO_CONTENT, ""))
 }

@@ -26,7 +26,12 @@ export class CdkStack extends Stack {
     });
 
     const database = new Database(this, "Database");
-    const lambdas = new Lambdas(this, "Lambdas", database.usersTable);
+    const lambdas = new Lambdas(
+      this,
+      "Lambdas",
+      database.usersTable,
+      database.sessionsTable
+    );
     const api = new Api(this, "ApiGateway", {
       domainName: DOMAIN_NAME,
       certificate,

@@ -27,11 +27,19 @@ export class Lambdas extends Construct {
     this.signupHandler = new RustFunction(this, "SignupFunction", {
       manifestPath,
       binaryName: "signup",
+      environment: {
+        USERS_TABLE_NAME: usersTable.tableName,
+        SESSIONS_TABLE_NAME: sessionsTable.tableName,
+      },
     });
 
     this.loginHandler = new RustFunction(this, "LoginFunction", {
       manifestPath,
       binaryName: "login",
+      environment: {
+        USERS_TABLE_NAME: usersTable.tableName,
+        SESSIONS_TABLE_NAME: sessionsTable.tableName,
+      },
     });
 
     usersTable.grantReadWriteData(this.signupHandler);

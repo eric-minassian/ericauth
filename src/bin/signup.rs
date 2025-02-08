@@ -1,15 +1,15 @@
 use std::env::set_var;
 
-use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
-    Argon2,
-};
 use ericauth::{
-    get_user, insert_user,
-    session::{create_session, generate_session_token},
+    db::Database,
+    error_response,
+    password::verify_password_strength,
+    session::{create_session, generate_session_token, SessionResponse},
+    user::create_user,
 };
 use lambda_http::{
-    http::StatusCode, run, service_fn, tracing, Error, IntoResponse, Request, RequestPayloadExt,
+    http::StatusCode, run, service_fn, tracing, Body, Error, IntoResponse, Request,
+    RequestPayloadExt, Response,
 };
 use serde::Deserialize;
 
@@ -29,65 +29,74 @@ pub struct SignupPayload {
 }
 
 async fn function_handler(event: Request) -> Result<impl IntoResponse, Error> {
+    // Check client IP
     let Some(client_ip) = event.headers().get("X-Forwarded-For") else {
-        return Ok((StatusCode::BAD_REQUEST, "missing X-Forwarded-For header"));
+        return Ok(error_response(
+            StatusCode::BAD_REQUEST,
+            "missing X-Forwarded-For header",
+        ));
     };
 
     if client_ip.is_empty() {
-        return Ok((StatusCode::BAD_REQUEST, "empty X-Forwarded-For header"));
+        return Ok(error_response(
+            StatusCode::BAD_REQUEST,
+            "empty X-Forwarded-For header",
+        ));
     }
 
-    let body = event
-        .payload::<SignupPayload>()?
-        .ok_or_else(|| Error::from("missing request body"))?;
+    // Parse and validate request body
+    let body = match event.payload::<SignupPayload>()? {
+        Some(payload) => payload,
+        None => {
+            return Ok(error_response(
+                StatusCode::BAD_REQUEST,
+                "missing request body",
+            ))
+        }
+    };
 
     if body.email.is_empty() || body.password.is_empty() {
-        return Ok((StatusCode::BAD_REQUEST, "missing email or password"));
+        return Ok(error_response(
+            StatusCode::BAD_REQUEST,
+            "missing email or password",
+        ));
     }
 
     if !verify_email(&body.email) {
-        return Ok((StatusCode::BAD_REQUEST, "invalid email"));
+        return Ok(error_response(StatusCode::BAD_REQUEST, "invalid email"));
     }
 
-    let config = aws_config::load_from_env().await;
-    let ddb_client = aws_sdk_dynamodb::Client::new(&config);
+    // Database operations
+    let db = Database::new().await;
 
-    if !get_user(&ddb_client, body.email.clone()).await?.is_none() {
-        return Ok((StatusCode::BAD_REQUEST, "email already in use"));
+    if !db.get_user_by_email(body.email.clone()).await?.is_none() {
+        return Ok(error_response(
+            StatusCode::BAD_REQUEST,
+            "email already in use",
+        ));
     }
 
     if !verify_password_strength(&body.password) {
-        return Ok((StatusCode::BAD_REQUEST, "password too weak"));
+        return Ok(error_response(StatusCode::BAD_REQUEST, "password too weak"));
     }
 
-    let password_hash = hash_password(&body.password)?;
+    // Create user and session
+    let user = create_user(&db, body.email, body.password).await?;
+    let session_token = generate_session_token().await?;
+    let session = create_session(&db, session_token.clone(), user.id)
+        .await
+        .unwrap();
 
-    insert_user(&ddb_client, body.email, password_hash).await?;
+    // Success response
+    let response = Response::builder()
+        .status(StatusCode::CREATED)
+        .set_session_token(session_token, session.expires_at)
+        .body(Body::Empty)
+        .unwrap();
 
-    // let session_token = generate_session_token().await?;
-    // let sessions = create_session(&ddb_client, session_token, user_id, flags)
-    //     .await
-    //     .unwrap();
-
-    Ok((StatusCode::NO_CONTENT, ""))
+    Ok(response)
 }
 
 fn verify_email(email: &str) -> bool {
     email.contains('@') && email.len() < 256
-}
-
-fn verify_password_strength(password: &str) -> bool {
-    password.len() > 8
-}
-
-fn hash_password(password: &str) -> Result<String, Error> {
-    let salt = SaltString::generate(&mut OsRng);
-
-    let argon2 = Argon2::default();
-    let password_hash = argon2
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|_| Error::from("Failed to hash password"))?
-        .to_string();
-
-    Ok(password_hash)
 }

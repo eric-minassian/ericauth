@@ -10,7 +10,13 @@ export class Database extends Construct {
 
     this.usersTable = new TableV2(this, "UsersTable", {
       tableName: "UsersTable",
-      partitionKey: { name: "email", type: AttributeType.STRING },
+      partitionKey: { name: "id", type: AttributeType.STRING },
+      globalSecondaryIndexes: [
+        {
+          indexName: "emailIndex",
+          partitionKey: { name: "email", type: AttributeType.STRING },
+        },
+      ],
     });
 
     this.sessionsTable = new TableV2(this, "SessionsTable", {

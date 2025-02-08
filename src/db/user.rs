@@ -7,30 +7,33 @@ use uuid::Uuid;
 
 use super::Database;
 
-static USERS_TABLE_NAME: LazyLock<String> = LazyLock::new(|| {
-    env::var("USERS_TABLE_NAME").expect("USERS_TABLE_NAME environment variable must be set")
-});
+static USERS_TABLE_NAME: LazyLock<String> =
+    LazyLock::new(|| env::var("USERS_TABLE_NAME").unwrap_or("UsersTable".to_string()));
+static USERS_TABLE_EMAIL_INDEX_NAME: LazyLock<String> =
+    LazyLock::new(|| env::var("USERS_TABLE_EMAIL_INDEX_NAME").unwrap_or("emailIndex".to_string()));
 
 #[derive(Serialize, Deserialize)]
-pub struct User {
+pub struct UserTable {
     pub id: Uuid,
     pub email: String,
     pub password_hash: String,
 }
 
 impl Database {
-    pub async fn get_user_by_email(&self, email: String) -> Result<Option<User>, String> {
+    pub async fn get_user_by_email(&self, email: String) -> Result<Option<UserTable>, String> {
         let response = self
             .ddb_client
-            .get_item()
+            .query()
             .table_name(&*USERS_TABLE_NAME)
-            .key("email", AttributeValue::S(email))
+            .index_name(&*USERS_TABLE_EMAIL_INDEX_NAME)
+            .key_condition_expression("email = :email")
+            .expression_attribute_values(":email", AttributeValue::S(email))
             .send()
             .await
-            .map_err(|_| "Failed to get user by email")?;
+            .unwrap();
 
-        if let Some(item) = response.item {
-            Ok(Some(from_item::<User>(item).unwrap()))
+        if let Some(item) = response.items.and_then(|items| items.into_iter().next()) {
+            Ok(Some(from_item::<UserTable>(item).unwrap()))
         } else {
             Ok(None)
         }
@@ -41,7 +44,7 @@ impl Database {
             return Err("Email already in use".to_string());
         }
 
-        let user = User {
+        let user = UserTable {
             id: Uuid::new_v4(),
             email,
             password_hash,

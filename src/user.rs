@@ -1,19 +1,10 @@
 use uuid::Uuid;
 
-use crate::{
-    encryption::encrypt_str, generate_random_recovery_code, password::hash_password,
-    USERS_TABLE_NAME,
-};
+use crate::{db::Database, password::hash_password};
 
 pub struct User {
     pub id: Uuid,
     pub email: String,
-    pub username: String,
-    pub email_verified: bool,
-    pub registered_totp: bool,
-    pub registered_security_key: bool,
-    pub registered_passkey: bool,
-    pub registered_2fa: bool,
 }
 
 pub fn verify_username_input(username: &str) -> bool {
@@ -21,16 +12,15 @@ pub fn verify_username_input(username: &str) -> bool {
 }
 
 pub async fn create_user(
-    client: &aws_sdk_dynamodb::Client,
+    db: &Database,
     email: String,
-    username: String,
     password: String,
 ) -> Result<User, &'static str> {
     let password_hash = hash_password(&password)?;
-    let recovery_code = generate_random_recovery_code()?;
-    let encrypted_recovery_code = encrypt_str(&recovery_code)?;
 
-    unimplemented!()
+    let user_id = db.insert_user(email.clone(), password_hash).await.unwrap();
+
+    Ok(User { id: user_id, email })
 }
 
 #[cfg(test)]

@@ -10,7 +10,7 @@ argon2 = "0.5.3"
 aws-config = { version = "1.5.15", features = ["behavior-version-latest"] }
 aws-sdk-dynamodb = "1.62.0"
 base32 = "0.5.1"
-chrono = "0.4.39"
+chrono = { version = "0.4.39", features = ["serde"] }
 getrandom = "0.3.1"
 hex = "0.4.3"
 lambda_http = "0.14.0"

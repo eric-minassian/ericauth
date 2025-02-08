@@ -17,9 +17,10 @@ lambda_http = "0.14.0"
 rand = "0.9.0"
 rand_core = { version = "0.6.4", features = ["std"] }
 serde = { version = "1.0.217", features = ["derive"] }
+serde_dynamo = { version = "4.2.14", features = ["aws-sdk-dynamodb+1"] }
 sha2 = "0.10.8"
 tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"] }
-uuid = { version = "1.13.1", features = ["v4", "fast-rng"] }
+uuid = { version = "1.13.1", features = ["v4", "fast-rng", "serde"] }
 
 
 [lints.rust]

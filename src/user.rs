@@ -1,6 +1,9 @@
 use uuid::Uuid;
 
-use crate::{encryption::encrypt_str, generate_random_recovery_code, password::hash_password};
+use crate::{
+    encryption::encrypt_str, generate_random_recovery_code, password::hash_password,
+    USERS_TABLE_NAME,
+};
 
 pub struct User {
     pub id: Uuid,
@@ -18,6 +21,7 @@ pub fn verify_username_input(username: &str) -> bool {
 }
 
 pub async fn create_user(
+    client: &aws_sdk_dynamodb::Client,
     email: String,
     username: String,
     password: String,

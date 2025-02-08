@@ -5,15 +5,25 @@ use aes_gcm::{
     AeadCore, Aes256Gcm, Key, KeyInit, Nonce,
 };
 
-const NONCE_SIZE: usize = 12;
-const AES_AUTH_TAG_SIZE: usize = 16;
+const NONCE_LENGTH: usize = 12;
+const AUTH_TAG_LENGTH: usize = 16;
+const EXPECTED_KEY_LENGTH: usize = 32;
 
 static ENCRYPTION_KEY: OnceLock<Key<Aes256Gcm>> = OnceLock::new();
 
 fn get_encryption_key() -> &'static Key<Aes256Gcm> {
     ENCRYPTION_KEY.get_or_init(|| {
-        let key_str = env::var("ENCRYPTION_KEY").expect("ENCRYPTION_KEY must be set");
+        let key_str =
+            env::var("ENCRYPTION_KEY").expect("ENCRYPTION_KEY environment variable must be set");
+
         let key_bytes = key_str.as_bytes();
+        if key_bytes.len() != EXPECTED_KEY_LENGTH {
+            panic!(
+                "ENCRYPTION_KEY must be exactly {} bytes when UTF-8 encoded, got {} bytes",
+                EXPECTED_KEY_LENGTH,
+                key_bytes.len()
+            );
+        }
 
         Key::<Aes256Gcm>::from_slice(key_bytes).to_owned()
     })
@@ -28,7 +38,7 @@ pub fn encrypt(data: &[u8]) -> Result<Vec<u8>, &'static str> {
         .encrypt(&nonce, data)
         .map_err(|_| "encryption failed")?;
 
-    let mut result = Vec::with_capacity(NONCE_SIZE + encrypted_data.len());
+    let mut result = Vec::with_capacity(NONCE_LENGTH + encrypted_data.len());
     result.extend_from_slice(nonce.as_slice());
     result.extend_from_slice(&encrypted_data);
 
@@ -40,15 +50,15 @@ pub fn encrypt_str(data: &str) -> Result<Vec<u8>, &'static str> {
 }
 
 pub fn decrypt(encrypted: &[u8]) -> Result<Vec<u8>, &'static str> {
-    if encrypted.len() <= NONCE_SIZE + AES_AUTH_TAG_SIZE {
+    if encrypted.len() <= NONCE_LENGTH + AUTH_TAG_LENGTH {
         return Err("encrypted data too short");
     }
 
     let key = get_encryption_key();
     let cipher = Aes256Gcm::new(key);
 
-    let nonce = Nonce::from_slice(&encrypted[..NONCE_SIZE]);
-    let encrypted_data = &encrypted[NONCE_SIZE..];
+    let nonce = Nonce::from_slice(&encrypted[..NONCE_LENGTH]);
+    let encrypted_data = &encrypted[NONCE_LENGTH..];
 
     cipher
         .decrypt(nonce, encrypted_data)

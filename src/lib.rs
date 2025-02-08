@@ -1,3 +1,4 @@
+pub mod db;
 pub mod encryption;
 pub mod password;
 pub mod session;

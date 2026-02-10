@@ -1,23 +1,18 @@
-use std::{env, sync::LazyLock};
-
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use serde_dynamo::aws_sdk_dynamodb_1::to_item;
 use uuid::Uuid;
 
-use super::Database;
+use super::DynamoDb;
 
-static SESSIONS_TABLE_NAME: LazyLock<String> =
-    LazyLock::new(|| env::var("SESSIONS_TABLE_NAME").unwrap_or("SessionsTable".to_string()));
-
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SessionTable {
     pub id: String,
     pub user_id: Uuid,
     pub expires_at: DateTime<chrono::Utc>,
 }
 
-impl Database {
+impl DynamoDb {
     pub async fn insert_session(
         &self,
         id: String,
@@ -32,9 +27,9 @@ impl Database {
 
         let item = to_item(&session).map_err(|_| "Failed to serialize session")?;
 
-        self.ddb_client
+        self.client
             .put_item()
-            .table_name(&*SESSIONS_TABLE_NAME)
+            .table_name(&self.sessions_table)
             .set_item(Some(item))
             .send()
             .await

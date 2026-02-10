@@ -14,7 +14,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ## Phase 0: Restructure to Single axum Lambda
 
-### 0.1 — Replace `lambda_http` handlers with axum + single binary
+### 0.1 — ~~Replace `lambda_http` handlers with axum + single binary~~ DONE
 
 **Context:** Currently the project has 3 separate binaries (`src/bin/health.rs`, `src/bin/signup.rs`, `src/bin/login.rs`), each a standalone Lambda function. We are consolidating into a single binary with an axum Router.
 
@@ -85,7 +85,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 0.2 — Update CDK to deploy single Lambda
+### 0.2 — ~~Update CDK to deploy single Lambda~~ DONE
 
 **Files:** `cdk/lib/constructs/lambda.ts`, `cdk/lib/constructs/api.ts`, `cdk/lib/cdk-stack.ts`
 
@@ -135,7 +135,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 0.3 — Make Database struct Clone-friendly for axum State
+### 0.3 — ~~Make Database struct Clone-friendly for axum State~~ DONE
 
 **Files:** `src/db/mod.rs`, `src/db/user.rs`, `src/db/session.rs`, `src/state.rs`
 

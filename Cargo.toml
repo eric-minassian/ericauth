@@ -9,19 +9,23 @@ aes-gcm = "0.10.3"
 argon2 = "0.5.3"
 aws-config = { version = "1.5.15", features = ["behavior-version-latest"] }
 aws-sdk-dynamodb = "1.62.0"
+axum = "0.8"
 base32 = "0.5.1"
 chrono = { version = "0.4.39", features = ["serde"] }
 getrandom = "0.3.1"
 hex = "0.4.3"
-lambda_http = "0.14.0"
+lambda_http = "1"
 rand = "0.9.0"
 rand_core = { version = "0.6.4", features = ["std"] }
 serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1"
 serde_dynamo = { version = "4.2.14", features = ["aws-sdk-dynamodb+1"] }
 sha2 = "0.10.8"
 tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1.13.1", features = ["v4", "fast-rng", "serde"] }
-
 
 [lints.rust]
 unsafe_code = "forbid"

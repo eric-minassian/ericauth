@@ -41,10 +41,10 @@ new EricAuthStack(app, "EricAuth-Prod", {
 
 new OidcStack(app, "EricAuth-Oidc-Beta", {
   env: { account: BETA_ACCOUNT, region: REGION },
-  githubRepo: "ericminassian/ericauth",
+  githubRepo: "eric-minassian/ericauth",
 });
 
 new OidcStack(app, "EricAuth-Oidc-Prod", {
   env: { account: PROD_ACCOUNT, region: REGION },
-  githubRepo: "ericminassian/ericauth",
+  githubRepo: "eric-minassian/ericauth",
 });

@@ -2,7 +2,7 @@ use axum::http::header;
 use sha2::{digest::Update, Digest, Sha256};
 use uuid::Uuid;
 
-use crate::db::Database;
+use crate::{db::Database, error::AuthError};
 
 pub struct Session {
     pub id: String,
@@ -10,9 +10,10 @@ pub struct Session {
     pub expires_at: chrono::DateTime<chrono::Utc>,
 }
 
-pub async fn generate_session_token() -> Result<String, &'static str> {
+pub fn generate_session_token() -> Result<String, AuthError> {
     let mut token_bytes = [0u8; 20];
-    getrandom::fill(&mut token_bytes).map_err(|_| "Invalid Token")?;
+    getrandom::fill(&mut token_bytes)
+        .map_err(|e| AuthError::Internal(format!("Failed to generate session token: {e}")))?;
     let token =
         base32::encode(base32::Alphabet::Rfc4648 { padding: false }, &token_bytes).to_lowercase();
     Ok(token)
@@ -22,7 +23,7 @@ pub async fn create_session(
     db: &Database,
     token: String,
     user_id: Uuid,
-) -> Result<Session, &'static str> {
+) -> Result<Session, AuthError> {
     let hasher = Sha256::new();
     let session_id = hex::encode(hasher.chain(token.as_bytes()).finalize());
 
@@ -34,9 +35,7 @@ pub async fn create_session(
         expires_at,
     };
 
-    db.insert_session(session_id, user_id, expires_at)
-        .await
-        .unwrap();
+    db.insert_session(session_id, user_id, expires_at).await?;
 
     Ok(session)
 }

@@ -7,6 +7,8 @@ use std::env;
 use chrono::DateTime;
 use uuid::Uuid;
 
+use crate::error::AuthError;
+
 use self::user::UserTable;
 
 /// Database abstraction that can be backed by DynamoDB (production) or
@@ -46,14 +48,18 @@ impl Database {
         Database::Memory(memory::MemoryDb::new())
     }
 
-    pub async fn get_user_by_email(&self, email: String) -> Result<Option<UserTable>, String> {
+    pub async fn get_user_by_email(&self, email: String) -> Result<Option<UserTable>, AuthError> {
         match self {
             Database::Dynamo(db) => db.get_user_by_email(email).await,
             Database::Memory(db) => db.get_user_by_email(email).await,
         }
     }
 
-    pub async fn insert_user(&self, email: String, password_hash: String) -> Result<Uuid, String> {
+    pub async fn insert_user(
+        &self,
+        email: String,
+        password_hash: String,
+    ) -> Result<Uuid, AuthError> {
         match self {
             Database::Dynamo(db) => db.insert_user(email, password_hash).await,
             Database::Memory(db) => db.insert_user(email, password_hash).await,
@@ -65,7 +71,7 @@ impl Database {
         id: String,
         user_id: Uuid,
         expires_at: DateTime<chrono::Utc>,
-    ) -> Result<(), String> {
+    ) -> Result<(), AuthError> {
         match self {
             Database::Dynamo(db) => db.insert_session(id, user_id, expires_at).await,
             Database::Memory(db) => db.insert_session(id, user_id, expires_at).await,

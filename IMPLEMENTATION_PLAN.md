@@ -163,7 +163,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ## Phase 1: Core Auth Hardening
 
-### 1.1 — Replace `.unwrap()` with proper error propagation
+### 1.1 — ~~Replace `.unwrap()` with proper error propagation~~ DONE
 
 **Files:** `src/lib.rs`, `src/user.rs`, `src/password.rs`, `src/session.rs`, `src/encryption.rs`, `src/db/mod.rs`, `src/db/user.rs`, `src/db/session.rs`, `src/routes/signup.rs`, `src/routes/login.rs`
 

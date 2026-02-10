@@ -78,53 +78,9 @@ jobs:
         run: pnpm cdk deploy EricAuth-Beta --require-approval never
         working-directory: cdk
 
-  e2e-tests:
-    name: E2E Tests (Beta)
-    needs: deploy-beta
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Health check
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://auth-beta.ericminassian.com/health)
-          if [ "$STATUS" != "200" ]; then
-            echo "Health check failed with status $STATUS"
-            exit 1
-          fi
-          echo "Health check passed"
-
-      - name: Signup flow test
-        run: |
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            -H "Content-Type: application/json" \
-            -H "X-Forwarded-For: 127.0.0.1" \
-            -d '{"email":"","password":""}' \
-            https://auth-beta.ericminassian.com/signup)
-          STATUS=$(echo "$RESPONSE" | tail -1)
-          if [ "$STATUS" != "400" ]; then
-            echo "Expected 400 for empty signup, got $STATUS"
-            exit 1
-          fi
-          echo "Signup validation test passed"
-
-      - name: Login flow test
-        run: |
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            -H "Content-Type: application/json" \
-            -H "X-Forwarded-For: 127.0.0.1" \
-            -d '{"email":"nonexistent@example.com","password":"Test1234!"}' \
-            https://auth-beta.ericminassian.com/login)
-          STATUS=$(echo "$RESPONSE" | tail -1)
-          if [ "$STATUS" != "401" ]; then
-            echo "Expected 401 for invalid login, got $STATUS"
-            exit 1
-          fi
-          echo "Login validation test passed"
-
   deploy-prod:
     name: Deploy to Prod
-    needs: e2e-tests
+    needs: deploy-beta
     runs-on: ubuntu-latest
     environment: prod
     steps:

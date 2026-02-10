@@ -1,3 +1,4 @@
+use chrono::Utc;
 use uuid::Uuid;
 
 use crate::{db::Database, error::AuthError, password::hash_password};
@@ -5,6 +6,8 @@ use crate::{db::Database, error::AuthError, password::hash_password};
 pub struct User {
     pub id: Uuid,
     pub email: String,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 pub fn verify_username_input(username: &str) -> bool {
@@ -18,9 +21,17 @@ pub async fn create_user(
 ) -> Result<User, AuthError> {
     let password_hash = hash_password(&password).map_err(|e| AuthError::Internal(e.to_string()))?;
 
-    let user_id = db.insert_user(email.clone(), password_hash).await?;
+    let now = Utc::now().to_rfc3339();
+    let user_id = db
+        .insert_user(email.clone(), password_hash, now.clone(), now.clone())
+        .await?;
 
-    Ok(User { id: user_id, email })
+    Ok(User {
+        id: user_id,
+        email,
+        created_at: now.clone(),
+        updated_at: now,
+    })
 }
 
 #[cfg(test)]

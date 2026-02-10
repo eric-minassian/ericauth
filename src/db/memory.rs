@@ -37,6 +37,8 @@ impl MemoryDb {
         &self,
         email: String,
         password_hash: String,
+        created_at: String,
+        updated_at: String,
     ) -> Result<Uuid, AuthError> {
         // Check uniqueness
         if self.get_user_by_email(email.clone()).await?.is_some() {
@@ -48,6 +50,8 @@ impl MemoryDb {
             id,
             email,
             password_hash,
+            created_at,
+            updated_at,
         };
 
         let mut users = self

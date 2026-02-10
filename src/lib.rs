@@ -1,5 +1,6 @@
 pub mod db;
 pub mod encryption;
+pub mod error;
 pub mod password;
 pub mod routes;
 pub mod session;

@@ -4,6 +4,8 @@ use std::sync::{Arc, RwLock};
 use chrono::DateTime;
 use uuid::Uuid;
 
+use crate::error::AuthError;
+
 use super::session::SessionTable;
 use super::user::UserTable;
 
@@ -23,18 +25,22 @@ impl MemoryDb {
         }
     }
 
-    pub async fn get_user_by_email(&self, email: String) -> Result<Option<UserTable>, String> {
+    pub async fn get_user_by_email(&self, email: String) -> Result<Option<UserTable>, AuthError> {
         let users = self
             .users
             .read()
-            .map_err(|e| format!("Lock error: {}", e))?;
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
         Ok(users.values().find(|u| u.email == email).cloned())
     }
 
-    pub async fn insert_user(&self, email: String, password_hash: String) -> Result<Uuid, String> {
+    pub async fn insert_user(
+        &self,
+        email: String,
+        password_hash: String,
+    ) -> Result<Uuid, AuthError> {
         // Check uniqueness
         if self.get_user_by_email(email.clone()).await?.is_some() {
-            return Err("Email already in use".to_string());
+            return Err(AuthError::Conflict("email already in use".to_string()));
         }
 
         let id = Uuid::new_v4();
@@ -47,7 +53,7 @@ impl MemoryDb {
         let mut users = self
             .users
             .write()
-            .map_err(|e| format!("Lock error: {}", e))?;
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
         users.insert(id, user);
 
         Ok(id)
@@ -58,7 +64,7 @@ impl MemoryDb {
         id: String,
         user_id: Uuid,
         expires_at: DateTime<chrono::Utc>,
-    ) -> Result<(), String> {
+    ) -> Result<(), AuthError> {
         let session = SessionTable {
             id: id.clone(),
             user_id,
@@ -68,7 +74,7 @@ impl MemoryDb {
         let mut sessions = self
             .sessions
             .write()
-            .map_err(|e| format!("Lock error: {}", e))?;
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
         sessions.insert(id, session);
 
         Ok(())

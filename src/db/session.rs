@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use serde_dynamo::aws_sdk_dynamodb_1::to_item;
 use uuid::Uuid;
 
+use crate::error::AuthError;
+
 use super::DynamoDb;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -18,14 +20,15 @@ impl DynamoDb {
         id: String,
         user_id: Uuid,
         expires_at: DateTime<chrono::Utc>,
-    ) -> Result<(), String> {
+    ) -> Result<(), AuthError> {
         let session = SessionTable {
             id,
             user_id,
             expires_at,
         };
 
-        let item = to_item(&session).map_err(|_| "Failed to serialize session")?;
+        let item = to_item(&session)
+            .map_err(|e| AuthError::Internal(format!("Failed to serialize session: {e}")))?;
 
         self.client
             .put_item()
@@ -33,7 +36,7 @@ impl DynamoDb {
             .set_item(Some(item))
             .send()
             .await
-            .map_err(|_| "Failed to insert session")?;
+            .map_err(|e| AuthError::Internal(format!("Failed to insert session: {e}")))?;
 
         Ok(())
     }

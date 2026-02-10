@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use crate::{db::Database, password::hash_password};
+use crate::{db::Database, error::AuthError, password::hash_password};
 
 pub struct User {
     pub id: Uuid,
@@ -15,10 +15,10 @@ pub async fn create_user(
     db: &Database,
     email: String,
     password: String,
-) -> Result<User, &'static str> {
-    let password_hash = hash_password(&password)?;
+) -> Result<User, AuthError> {
+    let password_hash = hash_password(&password).map_err(|e| AuthError::Internal(e.to_string()))?;
 
-    let user_id = db.insert_user(email.clone(), password_hash).await.unwrap();
+    let user_id = db.insert_user(email.clone(), password_hash).await?;
 
     Ok(User { id: user_id, email })
 }

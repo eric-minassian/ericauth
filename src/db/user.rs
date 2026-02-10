@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use serde_dynamo::aws_sdk_dynamodb_1::{from_item, to_item};
 use uuid::Uuid;
 
+use crate::error::AuthError;
+
 use super::DynamoDb;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -13,7 +15,7 @@ pub struct UserTable {
 }
 
 impl DynamoDb {
-    pub async fn get_user_by_email(&self, email: String) -> Result<Option<UserTable>, String> {
+    pub async fn get_user_by_email(&self, email: String) -> Result<Option<UserTable>, AuthError> {
         let response = self
             .client
             .query()
@@ -23,20 +25,24 @@ impl DynamoDb {
             .expression_attribute_values(":email", AttributeValue::S(email))
             .send()
             .await
-            .map_err(|e| format!("DynamoDB query failed: {}", e))?;
+            .map_err(|e| AuthError::Internal(format!("DynamoDB query failed: {e}")))?;
 
         if let Some(item) = response.items.and_then(|items| items.into_iter().next()) {
             let user = from_item::<UserTable>(item)
-                .map_err(|e| format!("Failed to deserialize user: {}", e))?;
+                .map_err(|e| AuthError::Internal(format!("Failed to deserialize user: {e}")))?;
             Ok(Some(user))
         } else {
             Ok(None)
         }
     }
 
-    pub async fn insert_user(&self, email: String, password_hash: String) -> Result<Uuid, String> {
+    pub async fn insert_user(
+        &self,
+        email: String,
+        password_hash: String,
+    ) -> Result<Uuid, AuthError> {
         if self.get_user_by_email(email.clone()).await?.is_some() {
-            return Err("Email already in use".to_string());
+            return Err(AuthError::Conflict("email already in use".to_string()));
         }
 
         let user = UserTable {
@@ -45,7 +51,8 @@ impl DynamoDb {
             password_hash,
         };
 
-        let item = to_item(&user).map_err(|_| "Failed to serialize user")?;
+        let item = to_item(&user)
+            .map_err(|e| AuthError::Internal(format!("Failed to serialize user: {e}")))?;
 
         self.client
             .put_item()
@@ -53,7 +60,7 @@ impl DynamoDb {
             .set_item(Some(item))
             .send()
             .await
-            .map_err(|_| "Failed to insert user")?;
+            .map_err(|e| AuthError::Internal(format!("Failed to insert user: {e}")))?;
 
         Ok(user.id)
     }

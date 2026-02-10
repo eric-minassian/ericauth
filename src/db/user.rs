@@ -12,6 +12,8 @@ pub struct UserTable {
     pub id: Uuid,
     pub email: String,
     pub password_hash: String,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 impl DynamoDb {
@@ -40,6 +42,8 @@ impl DynamoDb {
         &self,
         email: String,
         password_hash: String,
+        created_at: String,
+        updated_at: String,
     ) -> Result<Uuid, AuthError> {
         if self.get_user_by_email(email.clone()).await?.is_some() {
             return Err(AuthError::Conflict("email already in use".to_string()));
@@ -49,6 +53,8 @@ impl DynamoDb {
             id: Uuid::new_v4(),
             email,
             password_hash,
+            created_at,
+            updated_at,
         };
 
         let item = to_item(&user)

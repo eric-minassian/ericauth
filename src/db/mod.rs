@@ -59,10 +59,18 @@ impl Database {
         &self,
         email: String,
         password_hash: String,
+        created_at: String,
+        updated_at: String,
     ) -> Result<Uuid, AuthError> {
         match self {
-            Database::Dynamo(db) => db.insert_user(email, password_hash).await,
-            Database::Memory(db) => db.insert_user(email, password_hash).await,
+            Database::Dynamo(db) => {
+                db.insert_user(email, password_hash, created_at, updated_at)
+                    .await
+            }
+            Database::Memory(db) => {
+                db.insert_user(email, password_hash, created_at, updated_at)
+                    .await
+            }
         }
     }
 

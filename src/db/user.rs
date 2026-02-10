@@ -1,39 +1,34 @@
-use std::{env, sync::LazyLock};
-
 use aws_sdk_dynamodb::types::AttributeValue;
 use serde::{Deserialize, Serialize};
 use serde_dynamo::aws_sdk_dynamodb_1::{from_item, to_item};
 use uuid::Uuid;
 
-use super::Database;
+use super::DynamoDb;
 
-static USERS_TABLE_NAME: LazyLock<String> =
-    LazyLock::new(|| env::var("USERS_TABLE_NAME").unwrap_or("UsersTable".to_string()));
-static USERS_TABLE_EMAIL_INDEX_NAME: LazyLock<String> =
-    LazyLock::new(|| env::var("USERS_TABLE_EMAIL_INDEX_NAME").unwrap_or("emailIndex".to_string()));
-
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct UserTable {
     pub id: Uuid,
     pub email: String,
     pub password_hash: String,
 }
 
-impl Database {
+impl DynamoDb {
     pub async fn get_user_by_email(&self, email: String) -> Result<Option<UserTable>, String> {
         let response = self
-            .ddb_client
+            .client
             .query()
-            .table_name(&*USERS_TABLE_NAME)
-            .index_name(&*USERS_TABLE_EMAIL_INDEX_NAME)
+            .table_name(&self.users_table)
+            .index_name(&self.users_email_index)
             .key_condition_expression("email = :email")
             .expression_attribute_values(":email", AttributeValue::S(email))
             .send()
             .await
-            .unwrap();
+            .map_err(|e| format!("DynamoDB query failed: {}", e))?;
 
         if let Some(item) = response.items.and_then(|items| items.into_iter().next()) {
-            Ok(Some(from_item::<UserTable>(item).unwrap()))
+            let user = from_item::<UserTable>(item)
+                .map_err(|e| format!("Failed to deserialize user: {}", e))?;
+            Ok(Some(user))
         } else {
             Ok(None)
         }
@@ -52,9 +47,9 @@ impl Database {
 
         let item = to_item(&user).map_err(|_| "Failed to serialize user")?;
 
-        self.ddb_client
+        self.client
             .put_item()
-            .table_name(&*USERS_TABLE_NAME)
+            .table_name(&self.users_table)
             .set_item(Some(item))
             .send()
             .await

@@ -1,4 +1,4 @@
-use lambda_http::http::{header, response};
+use axum::http::header;
 use sha2::{digest::Update, Digest, Sha256};
 use uuid::Uuid;
 
@@ -30,7 +30,7 @@ pub async fn create_session(
 
     let session = Session {
         id: session_id.clone(),
-        user_id: user_id.clone(),
+        user_id,
         expires_at,
     };
 
@@ -41,27 +41,15 @@ pub async fn create_session(
     Ok(session)
 }
 
-pub trait SessionResponse {
-    fn set_session_token(
-        self,
-        token: String,
-        expires_at: chrono::DateTime<chrono::Utc>,
-    ) -> response::Builder;
-}
-
-impl SessionResponse for response::Builder {
-    fn set_session_token(
-        self,
-        token: String,
-        expires_at: chrono::DateTime<chrono::Utc>,
-    ) -> response::Builder {
-        let cookie = format!(
-            "session={}; HttpOnly; Path=/; Secure; SameSite=Lax; Expires={}",
-            token,
-            // Format the expires date in the correct format for cookies
-            expires_at.format("%a, %d %b %Y %H:%M:%S GMT")
-        );
-
-        self.header(header::SET_COOKIE, cookie)
-    }
+/// Build a Set-Cookie header value for a session token.
+pub fn session_cookie(
+    token: &str,
+    expires_at: chrono::DateTime<chrono::Utc>,
+) -> (header::HeaderName, String) {
+    let cookie = format!(
+        "session={}; HttpOnly; Path=/; Secure; SameSite=Lax; Expires={}",
+        token,
+        expires_at.format("%a, %d %b %Y %H:%M:%S GMT")
+    );
+    (header::SET_COOKIE, cookie)
 }

@@ -1,14 +1,18 @@
-import { LambdaIntegration, RestApi } from "aws-cdk-lib/aws-apigateway";
+import {
+  DomainNameOptions,
+  LambdaIntegration,
+  RestApi,
+} from "aws-cdk-lib/aws-apigateway";
 import { ICertificate } from "aws-cdk-lib/aws-certificatemanager";
 import { RustFunction } from "cargo-lambda-cdk";
 import { Construct } from "constructs";
 
 interface ApiProps {
-  domainName: string;
-  certificate: ICertificate;
-  healthHandler: RustFunction;
-  signupHandler: RustFunction;
-  loginHandler: RustFunction;
+  handler: RustFunction;
+  /** Custom domain name. Omit for dev deployments. */
+  domainName?: string;
+  /** ACM certificate for the custom domain. Required if domainName is set. */
+  certificate?: ICertificate;
 }
 
 export class Api extends Construct {
@@ -17,21 +21,28 @@ export class Api extends Construct {
   constructor(scope: Construct, id: string, props: ApiProps) {
     super(scope, id);
 
-    this.api = new RestApi(this, "Api", {
-      restApiName: "eric-auth",
-      domainName: {
+    let domainName: DomainNameOptions | undefined;
+    if (props.domainName && props.certificate) {
+      domainName = {
         domainName: props.domainName,
         certificate: props.certificate,
-      },
+      };
+    }
+
+    this.api = new RestApi(this, "Api", {
+      restApiName: "eric-auth",
+      ...(domainName && { domainName }),
     });
 
-    const health = this.api.root.addResource("health");
-    health.addMethod("GET", new LambdaIntegration(props.healthHandler));
+    const integration = new LambdaIntegration(props.handler);
 
-    const signup = this.api.root.addResource("signup");
-    signup.addMethod("POST", new LambdaIntegration(props.signupHandler));
+    // Root path "/" — {proxy+} does NOT match the bare root
+    this.api.root.addMethod("ANY", integration);
 
-    const login = this.api.root.addResource("login");
-    login.addMethod("POST", new LambdaIntegration(props.loginHandler));
+    // All sub-paths "/{proxy+}" — catches /health, /login, /.well-known/jwks.json, etc.
+    this.api.root.addProxy({
+      defaultIntegration: integration,
+      anyMethod: true,
+    });
   }
 }

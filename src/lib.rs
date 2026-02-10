@@ -1,10 +1,11 @@
-use lambda_http::{http::StatusCode, Body, Response};
-
 pub mod db;
 pub mod encryption;
 pub mod password;
+pub mod routes;
 pub mod session;
+pub mod state;
 pub mod user;
+pub mod validation;
 
 pub fn generate_random_recovery_code() -> Result<String, &'static str> {
     let mut recovery_code_bytes = [0u8; 10];
@@ -15,11 +16,4 @@ pub fn generate_random_recovery_code() -> Result<String, &'static str> {
         &recovery_code_bytes,
     )
     .to_uppercase())
-}
-
-pub fn error_response(status: StatusCode, message: &str) -> Response<Body> {
-    Response::builder()
-        .status(status)
-        .body(Body::from(message))
-        .unwrap()
 }

@@ -6,46 +6,27 @@ import path = require("path");
 
 const manifestPath = path.join(__dirname, "..", "..", "..");
 
-export class Lambdas extends Construct {
-  public readonly healthHandler: RustFunction;
-  public readonly signupHandler: RustFunction;
-  public readonly loginHandler: RustFunction;
+interface LambdaProps {
+  usersTable: TableV2;
+  sessionsTable: TableV2;
+}
 
-  constructor(
-    scope: Construct,
-    id: string,
-    usersTable: TableV2,
-    sessionsTable: TableV2
-  ) {
+export class Lambda extends Construct {
+  public readonly handler: RustFunction;
+
+  constructor(scope: Construct, id: string, props: LambdaProps) {
     super(scope, id);
 
-    this.healthHandler = new RustFunction(this, "HealthFunction", {
+    this.handler = new RustFunction(this, "AuthFunction", {
       manifestPath,
-      binaryName: "health",
-    });
-
-    this.signupHandler = new RustFunction(this, "SignupFunction", {
-      manifestPath,
-      binaryName: "signup",
+      binaryName: "ericauth",
       environment: {
-        USERS_TABLE_NAME: usersTable.tableName,
-        SESSIONS_TABLE_NAME: sessionsTable.tableName,
+        USERS_TABLE_NAME: props.usersTable.tableName,
+        SESSIONS_TABLE_NAME: props.sessionsTable.tableName,
       },
     });
 
-    this.loginHandler = new RustFunction(this, "LoginFunction", {
-      manifestPath,
-      binaryName: "login",
-      environment: {
-        USERS_TABLE_NAME: usersTable.tableName,
-        SESSIONS_TABLE_NAME: sessionsTable.tableName,
-      },
-    });
-
-    usersTable.grantReadWriteData(this.signupHandler);
-    usersTable.grantReadWriteData(this.loginHandler);
-
-    sessionsTable.grantReadWriteData(this.signupHandler);
-    sessionsTable.grantReadWriteData(this.loginHandler);
+    props.usersTable.grantReadWriteData(this.handler);
+    props.sessionsTable.grantReadWriteData(this.handler);
   }
 }

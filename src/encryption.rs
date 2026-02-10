@@ -46,7 +46,7 @@ pub fn encrypt(data: &[u8]) -> Result<Vec<u8>, &'static str> {
 }
 
 pub fn encrypt_str(data: &str) -> Result<Vec<u8>, &'static str> {
-    Ok(encrypt(data.as_bytes())?)
+    encrypt(data.as_bytes())
 }
 
 pub fn decrypt(encrypted: &[u8]) -> Result<Vec<u8>, &'static str> {

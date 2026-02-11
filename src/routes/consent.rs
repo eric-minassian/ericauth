@@ -2,12 +2,13 @@ use askama::Template;
 use axum::{
     extract::{Query, State},
     response::{IntoResponse, Redirect},
+    Extension,
 };
 use serde::Deserialize;
 
 use crate::{
-    error::AuthError, middleware::auth::AuthenticatedUser, routes::authorize, state::AppState,
-    templates::render,
+    error::AuthError, middleware::auth::AuthenticatedUser, middleware::csrf::CsrfToken,
+    routes::authorize, state::AppState, templates::render,
 };
 
 #[derive(Deserialize)]
@@ -25,6 +26,7 @@ pub struct ConsentQuery {
 #[derive(Template)]
 #[template(path = "consent.html")]
 struct ConsentTemplate {
+    csrf_token: String,
     client_id: String,
     email: String,
     scopes: Vec<String>,
@@ -38,6 +40,7 @@ struct ConsentTemplate {
 }
 
 pub async fn get_handler(
+    Extension(csrf): Extension<CsrfToken>,
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Query(params): Query<ConsentQuery>,
@@ -62,6 +65,7 @@ pub async fn get_handler(
         .collect();
 
     render(&ConsentTemplate {
+        csrf_token: csrf.0,
         client_id,
         email: user_record.email,
         scopes,

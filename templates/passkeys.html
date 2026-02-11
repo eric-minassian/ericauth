@@ -16,6 +16,7 @@
             <span class="passkey-date">Added {{ pk.created_at }}</span>
         </div>
         <form method="POST" action="/passkeys/delete" class="passkey-delete">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="credential_id" value="{{ pk.credential_id }}">
             <button type="submit" class="btn-small btn-danger">Remove</button>
         </form>

@@ -172,7 +172,7 @@ pub async fn handler(
     Ok(Redirect::temporary(&consent_url).into_response())
 }
 
-fn build_oauth_query_string(
+pub fn build_oauth_query_string(
     client_id: &str,
     redirect_uri: &str,
     scope: &str,

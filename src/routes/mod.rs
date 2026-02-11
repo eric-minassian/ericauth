@@ -13,11 +13,12 @@ mod token;
 mod token_revoke;
 
 use axum::{
+    middleware,
     routing::{get, post},
     Router,
 };
 
-use crate::state::AppState;
+use crate::{middleware::csrf::csrf_middleware, state::AppState};
 
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -41,5 +42,6 @@ pub fn router(state: AppState) -> Router {
         .route("/passkeys/auth/begin", post(passkey::auth_begin))
         .route("/passkeys/auth/complete", post(passkey::auth_complete))
         .route("/recover", post(recover::handler))
+        .layer(middleware::from_fn(csrf_middleware))
         .with_state(state)
 }

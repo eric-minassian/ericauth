@@ -857,7 +857,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 6.2 — Add security headers as tower middleware
+### 6.2 — ~~Add security headers as tower middleware~~ DONE
 
 **Files:** new `src/middleware/security_headers.rs`, `src/routes/mod.rs`
 

@@ -21,7 +21,10 @@ use axum::{
     Router,
 };
 
-use crate::{middleware::csrf::csrf_middleware, state::AppState};
+use crate::{
+    middleware::{csrf::csrf_middleware, security_headers::security_headers_middleware},
+    state::AppState,
+};
 
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -52,5 +55,6 @@ pub fn router(state: AppState) -> Router {
         .route("/userinfo", get(userinfo::handler).post(userinfo::handler))
         .route("/recover", post(recover::handler))
         .layer(middleware::from_fn(csrf_middleware))
+        .layer(middleware::from_fn(security_headers_middleware))
         .with_state(state)
 }

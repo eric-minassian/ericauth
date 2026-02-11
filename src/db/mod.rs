@@ -1,4 +1,6 @@
+pub mod auth_code;
 pub mod challenge;
+pub mod client;
 pub mod credential;
 pub mod memory;
 pub mod refresh_token;
@@ -11,6 +13,8 @@ use uuid::Uuid;
 
 use crate::error::AuthError;
 
+use self::auth_code::AuthCodeTable;
+use self::client::ClientTable;
 use self::credential::CredentialTable;
 use self::refresh_token::RefreshTokenTable;
 use self::user::UserTable;
@@ -34,6 +38,8 @@ pub struct DynamoDb {
     pub credentials_table: String,
     pub credentials_user_id_index: String,
     pub challenges_table: String,
+    pub clients_table: String,
+    pub auth_codes_table: String,
 }
 
 impl Database {
@@ -56,6 +62,10 @@ impl Database {
                 .unwrap_or_else(|_| "userIdIndex".to_string()),
             challenges_table: env::var("CHALLENGES_TABLE_NAME")
                 .unwrap_or_else(|_| "ChallengesTable".to_string()),
+            clients_table: env::var("CLIENTS_TABLE_NAME")
+                .unwrap_or_else(|_| "ClientsTable".to_string()),
+            auth_codes_table: env::var("AUTH_CODES_TABLE_NAME")
+                .unwrap_or_else(|_| "AuthCodesTable".to_string()),
         })
     }
 
@@ -262,6 +272,41 @@ impl Database {
         match self {
             Database::Dynamo(db) => db.get_and_delete_challenge(challenge_id).await,
             Database::Memory(db) => db.get_and_delete_challenge(challenge_id).await,
+        }
+    }
+
+    // --- Client operations ---
+
+    pub async fn get_client(&self, client_id: &str) -> Result<Option<ClientTable>, AuthError> {
+        match self {
+            Database::Dynamo(db) => db.get_client(client_id).await,
+            Database::Memory(db) => db.get_client(client_id).await,
+        }
+    }
+
+    /// Insert a client (only supported by Memory backend, for testing).
+    pub async fn insert_client(&self, client: ClientTable) -> Result<(), AuthError> {
+        match self {
+            Database::Dynamo(_) => Err(AuthError::Internal(
+                "insert_client not supported on DynamoDB backend".into(),
+            )),
+            Database::Memory(db) => db.insert_client(client).await,
+        }
+    }
+
+    // --- Auth code operations ---
+
+    pub async fn insert_auth_code(&self, auth_code: &AuthCodeTable) -> Result<(), AuthError> {
+        match self {
+            Database::Dynamo(db) => db.insert_auth_code(auth_code).await,
+            Database::Memory(db) => db.insert_auth_code(auth_code).await,
+        }
+    }
+
+    pub async fn redeem_auth_code(&self, code: &str) -> Result<Option<AuthCodeTable>, AuthError> {
+        match self {
+            Database::Dynamo(db) => db.redeem_auth_code(code).await,
+            Database::Memory(db) => db.redeem_auth_code(code).await,
         }
     }
 }

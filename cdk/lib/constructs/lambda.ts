@@ -12,6 +12,8 @@ interface LambdaProps {
   refreshTokensTable: TableV2;
   credentialsTable: TableV2;
   challengesTable: TableV2;
+  clientsTable: TableV2;
+  authCodesTable: TableV2;
 }
 
 export class Lambda extends Construct {
@@ -29,6 +31,8 @@ export class Lambda extends Construct {
         REFRESH_TOKENS_TABLE_NAME: props.refreshTokensTable.tableName,
         CREDENTIALS_TABLE_NAME: props.credentialsTable.tableName,
         CHALLENGES_TABLE_NAME: props.challengesTable.tableName,
+        CLIENTS_TABLE_NAME: props.clientsTable.tableName,
+        AUTH_CODES_TABLE_NAME: props.authCodesTable.tableName,
       },
     });
 
@@ -37,5 +41,7 @@ export class Lambda extends Construct {
     props.refreshTokensTable.grantReadWriteData(this.handler);
     props.credentialsTable.grantReadWriteData(this.handler);
     props.challengesTable.grantReadWriteData(this.handler);
+    props.clientsTable.grantReadData(this.handler);
+    props.authCodesTable.grantReadWriteData(this.handler);
   }
 }

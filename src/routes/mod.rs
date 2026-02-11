@@ -1,15 +1,18 @@
+pub(crate) mod authorize;
 mod consent;
 mod health;
 mod jwks;
 mod login;
 mod login_page;
 mod logout;
+mod openid_config;
 mod passkey;
 mod passkeys_page;
 mod signup;
 mod signup_page;
 mod token;
 mod token_revoke;
+mod userinfo;
 
 use axum::{
     routing::{get, post},
@@ -39,5 +42,11 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/passkeys/auth/begin", post(passkey::auth_begin))
         .route("/passkeys/auth/complete", post(passkey::auth_complete))
+        .route("/authorize", get(authorize::handler))
+        .route(
+            "/.well-known/openid-configuration",
+            get(openid_config::handler),
+        )
+        .route("/userinfo", get(userinfo::handler).post(userinfo::handler))
         .with_state(state)
 }

@@ -6,7 +6,8 @@ use axum::{
 use serde::Deserialize;
 
 use crate::{
-    error::AuthError, middleware::auth::AuthenticatedUser, state::AppState, templates::render,
+    error::AuthError, middleware::auth::AuthenticatedUser, routes::authorize, state::AppState,
+    templates::render,
 };
 
 #[derive(Deserialize)]
@@ -89,7 +90,8 @@ pub struct ConsentForm {
 }
 
 pub async fn post_handler(
-    _user: AuthenticatedUser,
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
     axum::Form(form): axum::Form<ConsentForm>,
 ) -> Result<impl IntoResponse, AuthError> {
     let redirect_uri = form
@@ -107,14 +109,23 @@ pub async fn post_handler(
         return Ok(Redirect::temporary(&url));
     }
 
-    // Placeholder: redirect with a dummy auth code until Phase 5 implements real auth codes
-    let mut url = redirect_uri;
-    url.push_str(if url.contains('?') { "&" } else { "?" });
-    url.push_str("code=placeholder");
-    if let Some(s) = &form.state {
-        url.push_str("&state=");
-        url.push_str(s);
-    }
+    // Generate an authorization code
+    let code_challenge = form
+        .code_challenge
+        .as_deref()
+        .ok_or_else(|| AuthError::BadRequest("missing code_challenge".into()))?;
 
+    let raw_code = authorize::create_authorization_code(
+        &state,
+        &user.user_id.to_string(),
+        &form.client_id,
+        &redirect_uri,
+        form.scope.as_deref().unwrap_or(""),
+        code_challenge,
+        form.nonce.as_deref(),
+    )
+    .await?;
+
+    let url = authorize::build_code_redirect(&redirect_uri, &raw_code, form.state.as_deref());
     Ok(Redirect::temporary(&url))
 }

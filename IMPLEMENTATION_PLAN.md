@@ -590,7 +590,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ## Phase 4: Hosted Auth UI
 
-### 4.1 — Add Askama templates and base layout
+### 4.1 — ~~Add Askama templates and base layout~~ DONE
 
 **Files:** `Cargo.toml`, new `templates/base.html`, new `src/templates.rs`
 

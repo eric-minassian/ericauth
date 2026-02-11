@@ -11,6 +11,8 @@ export class Database extends Construct {
   public readonly refreshTokensTable: TableV2;
   public readonly credentialsTable: TableV2;
   public readonly challengesTable: TableV2;
+  public readonly clientsTable: TableV2;
+  public readonly authCodesTable: TableV2;
 
   constructor(scope: Construct, id: string, props: DatabaseProps) {
     super(scope, id);
@@ -54,6 +56,17 @@ export class Database extends Construct {
     this.challengesTable = new TableV2(this, "ChallengesTable", {
       tableName: `${prefix}-challenges`,
       partitionKey: { name: "challenge_id", type: AttributeType.STRING },
+      timeToLiveAttribute: "expires_at",
+    });
+
+    this.clientsTable = new TableV2(this, "ClientsTable", {
+      tableName: `${prefix}-clients`,
+      partitionKey: { name: "client_id", type: AttributeType.STRING },
+    });
+
+    this.authCodesTable = new TableV2(this, "AuthCodesTable", {
+      tableName: `${prefix}-auth-codes`,
+      partitionKey: { name: "code", type: AttributeType.STRING },
       timeToLiveAttribute: "expires_at",
     });
   }

@@ -692,7 +692,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ## Phase 5: OAuth2 / OIDC Provider
 
-### 5.1 — Add Clients and Auth Codes DynamoDB tables
+### 5.1 — ~~Add Clients and Auth Codes DynamoDB tables~~ DONE
 
 **Files:** `cdk/lib/constructs/database.ts`, `cdk/lib/constructs/lambda.ts`, `src/db/mod.rs`, `src/state.rs`
 
@@ -718,7 +718,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 5.2 — Add Client and Auth Code DB operations + `get_user_by_id`
+### 5.2 — ~~Add Client and Auth Code DB operations + `get_user_by_id`~~ DONE
 
 **Files:** new `src/db/client.rs`, new `src/db/auth_code.rs`, `src/db/mod.rs`, `src/db/user.rs`
 
@@ -729,7 +729,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 5.3 — Implement `/authorize` endpoint
+### 5.3 — ~~Implement `/authorize` endpoint~~ DONE
 
 **Files:** new `src/routes/authorize.rs`, `src/routes/mod.rs`
 
@@ -749,7 +749,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 5.4 — Wire login/signup POST handlers to OAuth2 flow
+### 5.4 — ~~Wire login/signup POST handlers to OAuth2 flow~~ DONE
 
 **Files:** `src/routes/login.rs`, `src/routes/signup.rs`
 
@@ -761,7 +761,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 5.5 — Implement OIDC discovery endpoint
+### 5.5 — ~~Implement OIDC discovery endpoint~~ DONE
 
 **Files:** new `src/routes/openid_config.rs`, `src/routes/mod.rs`
 
@@ -790,7 +790,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 5.6 — Implement `/userinfo` endpoint
+### 5.6 — ~~Implement `/userinfo` endpoint~~ DONE
 
 **Files:** new `src/routes/userinfo.rs`, new `src/middleware/bearer.rs`, `src/middleware/mod.rs`, `src/routes/mod.rs`
 
@@ -816,7 +816,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 5.7 — Add `authorization_code` grant and ID token to `/token` endpoint
+### 5.7 — ~~Add `authorization_code` grant and ID token to `/token` endpoint~~ DONE
 
 **Files:** `src/routes/token.rs`
 

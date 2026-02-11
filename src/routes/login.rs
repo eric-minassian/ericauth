@@ -1,8 +1,8 @@
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
-    response::IntoResponse,
-    Json,
+    response::{IntoResponse, Redirect},
+    Form,
 };
 use serde::Deserialize;
 
@@ -18,12 +18,21 @@ use crate::{
 pub struct LoginPayload {
     email: String,
     password: String,
+    // OAuth2 pass-through fields
+    client_id: Option<String>,
+    redirect_uri: Option<String>,
+    response_type: Option<String>,
+    scope: Option<String>,
+    state: Option<String>,
+    code_challenge: Option<String>,
+    code_challenge_method: Option<String>,
+    nonce: Option<String>,
 }
 
 pub async fn handler(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(body): Json<LoginPayload>,
+    Form(body): Form<LoginPayload>,
 ) -> Result<impl IntoResponse, AuthError> {
     // Check client IP
     let client_ip = headers
@@ -88,5 +97,38 @@ pub async fn handler(
             .map_err(|e| AuthError::Internal(format!("Failed to build cookie header: {e}")))?,
     );
 
-    Ok((StatusCode::NO_CONTENT, response_headers))
+    // If OAuth2 params are present, redirect to /authorize
+    if body.client_id.is_some() && body.redirect_uri.is_some() {
+        let mut authorize_url = "/authorize?".to_string();
+        authorize_url.push_str(&format!(
+            "client_id={}&redirect_uri={}",
+            urlencoding::encode(body.client_id.as_deref().unwrap_or("")),
+            urlencoding::encode(body.redirect_uri.as_deref().unwrap_or("")),
+        ));
+        if let Some(rt) = &body.response_type {
+            authorize_url.push_str(&format!("&response_type={}", urlencoding::encode(rt)));
+        }
+        if let Some(sc) = &body.scope {
+            authorize_url.push_str(&format!("&scope={}", urlencoding::encode(sc)));
+        }
+        if let Some(s) = &body.state {
+            authorize_url.push_str(&format!("&state={}", urlencoding::encode(s)));
+        }
+        if let Some(cc) = &body.code_challenge {
+            authorize_url.push_str(&format!("&code_challenge={}", urlencoding::encode(cc)));
+        }
+        if let Some(ccm) = &body.code_challenge_method {
+            authorize_url.push_str(&format!(
+                "&code_challenge_method={}",
+                urlencoding::encode(ccm)
+            ));
+        }
+        if let Some(n) = &body.nonce {
+            authorize_url.push_str(&format!("&nonce={}", urlencoding::encode(n)));
+        }
+
+        return Ok((response_headers, Redirect::temporary(&authorize_url)).into_response());
+    }
+
+    Ok((StatusCode::NO_CONTENT, response_headers).into_response())
 }

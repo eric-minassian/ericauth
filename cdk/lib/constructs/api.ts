@@ -30,7 +30,7 @@ export class Api extends Construct {
       defaultDomainMapping = { domainName: this.customDomainName };
     }
 
-    this.api = new HttpApi(this, "Api", {
+    this.api = new HttpApi(this, "HttpApi", {
       apiName: "eric-auth",
       defaultIntegration: integration,
       ...(defaultDomainMapping && { defaultDomainMapping }),

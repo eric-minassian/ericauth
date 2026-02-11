@@ -3,6 +3,7 @@ pub mod challenge;
 pub mod client;
 pub mod credential;
 pub mod memory;
+pub mod rate_limit;
 pub mod refresh_token;
 pub mod session;
 pub mod user;
@@ -40,6 +41,7 @@ pub struct DynamoDb {
     pub challenges_table: String,
     pub clients_table: String,
     pub auth_codes_table: String,
+    pub rate_limits_table: String,
 }
 
 impl Database {
@@ -66,6 +68,8 @@ impl Database {
                 .unwrap_or_else(|_| "ClientsTable".to_string()),
             auth_codes_table: env::var("AUTH_CODES_TABLE_NAME")
                 .unwrap_or_else(|_| "AuthCodesTable".to_string()),
+            rate_limits_table: env::var("RATE_LIMITS_TABLE_NAME")
+                .unwrap_or_else(|_| "RateLimitsTable".to_string()),
         })
     }
 
@@ -318,6 +322,21 @@ impl Database {
         match self {
             Database::Dynamo(db) => db.redeem_auth_code(code).await,
             Database::Memory(db) => db.redeem_auth_code(code).await,
+        }
+    }
+
+    // --- Rate limit operations ---
+
+    /// Increment a rate limit counter. Returns the new count.
+    /// `window_seconds` is the TTL for the rate limit entry.
+    pub async fn increment_rate_limit(
+        &self,
+        key: &str,
+        window_seconds: i64,
+    ) -> Result<i64, AuthError> {
+        match self {
+            Database::Dynamo(db) => db.increment_rate_limit(key, window_seconds).await,
+            Database::Memory(db) => db.increment_rate_limit(key, window_seconds).await,
         }
     }
 }

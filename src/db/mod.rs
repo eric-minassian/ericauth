@@ -78,15 +78,30 @@ impl Database {
         created_at: String,
         updated_at: String,
         scopes: Vec<String>,
+        recovery_codes: Vec<String>,
     ) -> Result<Uuid, AuthError> {
         match self {
             Database::Dynamo(db) => {
-                db.insert_user(email, password_hash, created_at, updated_at, scopes)
-                    .await
+                db.insert_user(
+                    email,
+                    password_hash,
+                    created_at,
+                    updated_at,
+                    scopes,
+                    recovery_codes,
+                )
+                .await
             }
             Database::Memory(db) => {
-                db.insert_user(email, password_hash, created_at, updated_at, scopes)
-                    .await
+                db.insert_user(
+                    email,
+                    password_hash,
+                    created_at,
+                    updated_at,
+                    scopes,
+                    recovery_codes,
+                )
+                .await
             }
         }
     }

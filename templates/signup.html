@@ -2,6 +2,17 @@
 
 {% block title %}Sign Up — EricAuth{% endblock %}
 
+{% block head %}
+<style>
+    .password-reqs {
+        font-size: 0.8rem;
+        color: #71717a;
+        margin: -0.5rem 0 1rem 1.25rem;
+    }
+    .password-reqs li { margin-bottom: 0.15rem; }
+</style>
+{% endblock %}
+
 {% block content %}
 <h1>Sign Up</h1>
 
@@ -11,6 +22,31 @@
 
 <form method="POST" action="/signup" id="signup-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if let Some(cid) = client_id %}
+    <input type="hidden" name="client_id" value="{{ cid }}">
+    {% endif %}
+    {% if let Some(uri) = redirect_uri %}
+    <input type="hidden" name="redirect_uri" value="{{ uri }}">
+    {% endif %}
+    {% if let Some(rt) = response_type %}
+    <input type="hidden" name="response_type" value="{{ rt }}">
+    {% endif %}
+    {% if let Some(sc) = scope %}
+    <input type="hidden" name="scope" value="{{ sc }}">
+    {% endif %}
+    {% if let Some(s) = state %}
+    <input type="hidden" name="state" value="{{ s }}">
+    {% endif %}
+    {% if let Some(cc) = code_challenge %}
+    <input type="hidden" name="code_challenge" value="{{ cc }}">
+    {% endif %}
+    {% if let Some(ccm) = code_challenge_method %}
+    <input type="hidden" name="code_challenge_method" value="{{ ccm }}">
+    {% endif %}
+    {% if let Some(n) = nonce %}
+    <input type="hidden" name="nonce" value="{{ n }}">
+    {% endif %}
+
     <label for="email">Email</label>
     <input type="email" id="email" name="email" required autocomplete="email">
 
@@ -33,7 +69,7 @@
 </form>
 
 <div class="link-row">
-    Already have an account? <a href="/login">Log in</a>
+    Already have an account? <a href="/login{% if !oauth_query.is_empty() %}?{{ oauth_query }}{% endif %}">Log in</a>
 </div>
 
 <script>
@@ -50,15 +86,4 @@ document.getElementById('signup-form').addEventListener('submit', function(e) {
     }
 });
 </script>
-{% endblock %}
-
-{% block head %}
-<style>
-    .password-reqs {
-        font-size: 0.8rem;
-        color: #666;
-        margin: -0.5rem 0 1rem 1.25rem;
-    }
-    .password-reqs li { margin-bottom: 0.15rem; }
-</style>
 {% endblock %}

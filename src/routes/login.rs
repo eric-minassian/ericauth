@@ -1,7 +1,7 @@
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Redirect},
+    http::HeaderMap,
+    response::{IntoResponse, Redirect, Response},
     Form,
 };
 use serde::Deserialize;
@@ -34,7 +34,55 @@ pub async fn handler(
     State(state): State<AppState>,
     headers: HeaderMap,
     Form(body): Form<LoginPayload>,
-) -> Result<impl IntoResponse, AuthError> {
+) -> Response {
+    // Build OAuth query string for error redirects before consuming body
+    let error_qs = build_oauth_qs(&[
+        ("client_id", &body.client_id),
+        ("redirect_uri", &body.redirect_uri),
+        ("response_type", &body.response_type),
+        ("scope", &body.scope),
+        ("state", &body.state),
+        ("code_challenge", &body.code_challenge),
+        ("code_challenge_method", &body.code_challenge_method),
+        ("nonce", &body.nonce),
+    ]);
+
+    match try_login(state, headers, body).await {
+        Ok(resp) => resp,
+        Err(err) => {
+            let msg = match &err {
+                AuthError::Internal(_) => "An unexpected error occurred",
+                AuthError::BadRequest(m)
+                | AuthError::Unauthorized(m)
+                | AuthError::Conflict(m)
+                | AuthError::NotFound(m)
+                | AuthError::TooManyRequests(m) => m,
+            };
+            let redirect_url = if error_qs.is_empty() {
+                format!("/login?error={}", urlencoding::encode(msg))
+            } else {
+                format!("/login?error={}&{}", urlencoding::encode(msg), error_qs)
+            };
+            Redirect::to(&redirect_url).into_response()
+        }
+    }
+}
+
+fn build_oauth_qs(params: &[(&str, &Option<String>)]) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for &(key, value) in params {
+        if let Some(v) = value {
+            parts.push(format!("{}={}", key, urlencoding::encode(v)));
+        }
+    }
+    parts.join("&")
+}
+
+async fn try_login(
+    state: AppState,
+    headers: HeaderMap,
+    body: LoginPayload,
+) -> Result<Response, AuthError> {
     // Extract client IP
     let client_ip = headers
         .get("X-Forwarded-For")
@@ -45,12 +93,12 @@ pub async fn handler(
     // Validate input
     if body.email.is_empty() || body.password.is_empty() {
         return Err(AuthError::BadRequest(
-            "missing email or password".to_string(),
+            "Email and password are required".to_string(),
         ));
     }
 
     if !verify_email(&body.email) {
-        return Err(AuthError::BadRequest("invalid email".to_string()));
+        return Err(AuthError::BadRequest("Invalid email address".to_string()));
     }
 
     // Look up user — perform dummy hash on miss to prevent timing enumeration
@@ -63,7 +111,7 @@ pub async fn handler(
                 "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
             );
             return Err(AuthError::Unauthorized(
-                "invalid email or password".to_string(),
+                "Invalid email or password".to_string(),
             ));
         }
     };
@@ -73,7 +121,7 @@ pub async fn handler(
         Some(hash) => hash,
         None => {
             return Err(AuthError::Unauthorized(
-                "password login not available for this account".to_string(),
+                "Password login not available for this account".to_string(),
             ));
         }
     };
@@ -83,7 +131,7 @@ pub async fn handler(
 
     if !valid {
         return Err(AuthError::Unauthorized(
-            "invalid email or password".to_string(),
+            "Invalid email or password".to_string(),
         ));
     }
 
@@ -122,8 +170,9 @@ pub async fn handler(
                 body.nonce.as_deref(),
             )
         );
-        return Ok((response_headers, Redirect::temporary(&authorize_url)).into_response());
+        return Ok((response_headers, Redirect::to(&authorize_url)).into_response());
     }
 
-    Ok((StatusCode::NO_CONTENT, response_headers).into_response())
+    // Non-OAuth login: redirect to passkeys management
+    Ok((response_headers, Redirect::to("/passkeys/manage")).into_response())
 }

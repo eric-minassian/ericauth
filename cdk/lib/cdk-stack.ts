@@ -31,6 +31,8 @@ export class EricAuthStack extends Stack {
       usersTable: database.usersTable,
       sessionsTable: database.sessionsTable,
       refreshTokensTable: database.refreshTokensTable,
+      credentialsTable: database.credentialsTable,
+      challengesTable: database.challengesTable,
     });
 
     if (props.domainName && props.hostedZoneDomain) {

@@ -10,6 +10,7 @@ pub mod session;
 pub mod state;
 pub mod user;
 pub mod validation;
+pub mod webauthn_config;
 
 pub fn generate_random_recovery_code() -> Result<String, &'static str> {
     let mut recovery_code_bytes = [0u8; 10];

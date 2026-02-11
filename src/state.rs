@@ -1,11 +1,15 @@
 use std::env;
+use std::sync::Arc;
 
-use crate::{db::Database, jwt::JwtKeys};
+use webauthn_rs::Webauthn;
+
+use crate::{db::Database, jwt::JwtKeys, webauthn_config::build_webauthn};
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: Database,
     pub jwt_keys: Option<JwtKeys>,
+    pub webauthn: Arc<Webauthn>,
 }
 
 impl AppState {
@@ -41,6 +45,12 @@ impl AppState {
             }
         };
 
-        Self { db, jwt_keys }
+        let webauthn = Arc::new(build_webauthn().expect("Failed to initialize WebAuthn"));
+
+        Self {
+            db,
+            jwt_keys,
+            webauthn,
+        }
     }
 }

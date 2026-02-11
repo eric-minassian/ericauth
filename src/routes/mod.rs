@@ -3,6 +3,7 @@ mod jwks;
 mod login;
 mod logout;
 mod passkey;
+mod recover;
 mod signup;
 mod token;
 mod token_revoke;
@@ -30,5 +31,6 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/passkeys/auth/begin", post(passkey::auth_begin))
         .route("/passkeys/auth/complete", post(passkey::auth_complete))
+        .route("/recover", post(recover::handler))
         .with_state(state)
 }

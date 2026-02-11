@@ -113,6 +113,27 @@ impl MemoryDb {
         Ok(())
     }
 
+    pub async fn remove_recovery_code(
+        &self,
+        user_id: &str,
+        code_hash: &str,
+    ) -> Result<(), AuthError> {
+        let user_uuid = Uuid::parse_str(user_id)
+            .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
+
+        let mut users = self
+            .users
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        let user = users
+            .get_mut(&user_uuid)
+            .ok_or_else(|| AuthError::NotFound("user not found".to_string()))?;
+
+        user.recovery_codes.retain(|c| c != code_hash);
+        Ok(())
+    }
+
     pub async fn insert_session(
         &self,
         id: String,

@@ -119,4 +119,37 @@ impl DynamoDb {
 
         Ok(())
     }
+
+    pub async fn remove_recovery_code(
+        &self,
+        user_id: &str,
+        code_hash: &str,
+    ) -> Result<(), AuthError> {
+        // Get current user to find the index of the code
+        let user = self
+            .get_user_by_id(user_id)
+            .await?
+            .ok_or_else(|| AuthError::NotFound("user not found".into()))?;
+
+        let new_codes: Vec<String> = user
+            .recovery_codes
+            .into_iter()
+            .filter(|c| c != code_hash)
+            .collect();
+
+        let codes_av = serde_dynamo::aws_sdk_dynamodb_1::to_attribute_value(&new_codes)
+            .map_err(|e| AuthError::Internal(format!("Failed to serialize recovery codes: {e}")))?;
+
+        self.client
+            .update_item()
+            .table_name(&self.users_table)
+            .key("id", AttributeValue::S(user_id.to_string()))
+            .update_expression("SET recovery_codes = :codes")
+            .expression_attribute_values(":codes", codes_av)
+            .send()
+            .await
+            .map_err(|e| AuthError::Internal(format!("Failed to remove recovery code: {e}")))?;
+
+        Ok(())
+    }
 }

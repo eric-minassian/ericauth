@@ -124,6 +124,17 @@ impl Database {
         }
     }
 
+    pub async fn remove_recovery_code(
+        &self,
+        user_id: &str,
+        code_hash: &str,
+    ) -> Result<(), AuthError> {
+        match self {
+            Database::Dynamo(db) => db.remove_recovery_code(user_id, code_hash).await,
+            Database::Memory(db) => db.remove_recovery_code(user_id, code_hash).await,
+        }
+    }
+
     pub async fn insert_session(
         &self,
         id: String,

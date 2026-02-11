@@ -573,7 +573,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 3.7 — Implement account recovery endpoint
+### 3.7 — ~~Implement account recovery endpoint~~ DONE
 
 **Files:** new `src/routes/recover.rs`, `src/db/user.rs`, `src/routes/mod.rs`
 

@@ -664,7 +664,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 4.6 — Add WebAuthn JavaScript for login page
+### 4.6 — ~~Add WebAuthn JavaScript for login page~~ DONE
 
 **Files:** `templates/login.html`
 

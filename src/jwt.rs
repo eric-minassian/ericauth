@@ -1,6 +1,9 @@
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use p256::ecdsa::SigningKey;
-use p256::pkcs8::{DecodePrivateKey, EncodePrivateKey};
+use p256::elliptic_curve::sec1::ToEncodedPoint;
+use p256::pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey};
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +35,25 @@ pub struct IdTokenClaims {
     pub nonce: Option<String>,
     pub email: String,
     pub email_verified: bool,
+}
+
+/// A single JSON Web Key (JWK) for an EC P-256 public key.
+#[derive(Serialize)]
+pub struct Jwk {
+    pub kty: &'static str,
+    pub crv: &'static str,
+    pub x: String,
+    pub y: String,
+    #[serde(rename = "use")]
+    pub use_: &'static str,
+    pub alg: &'static str,
+    pub kid: String,
+}
+
+/// A JSON Web Key Set (JWKS) containing one or more JWKs.
+#[derive(Serialize)]
+pub struct JwkSet {
+    pub keys: Vec<Jwk>,
 }
 
 /// Holds the ES256 signing/verification keys and metadata for JWT operations.
@@ -73,6 +95,30 @@ impl JwtKeys {
             decoding_key,
             kid: kid.to_string(),
             public_key_pem,
+        })
+    }
+
+    /// Convert the public key to a JWK representation for the JWKS endpoint.
+    pub fn to_jwk(&self) -> Result<Jwk, AuthError> {
+        let public_key = p256::PublicKey::from_public_key_pem(&self.public_key_pem)
+            .map_err(|e| AuthError::Internal(format!("Failed to parse public key PEM: {e}")))?;
+
+        let point = public_key.to_encoded_point(false);
+        let x_bytes = point
+            .x()
+            .ok_or_else(|| AuthError::Internal("Missing x coordinate".into()))?;
+        let y_bytes = point
+            .y()
+            .ok_or_else(|| AuthError::Internal("Missing y coordinate".into()))?;
+
+        Ok(Jwk {
+            kty: "EC",
+            crv: "P-256",
+            x: URL_SAFE_NO_PAD.encode(x_bytes),
+            y: URL_SAFE_NO_PAD.encode(y_bytes),
+            use_: "sig",
+            alg: "ES256",
+            kid: self.kid.clone(),
         })
     }
 
@@ -274,6 +320,36 @@ mod tests {
 
         assert_eq!(decoded.claims.nonce, None);
         assert!(!decoded.claims.email_verified);
+    }
+
+    #[test]
+    fn test_to_jwk_produces_valid_ec_key() {
+        let keys = test_keys();
+        let jwk = keys.to_jwk().unwrap();
+
+        assert_eq!(jwk.kty, "EC");
+        assert_eq!(jwk.crv, "P-256");
+        assert_eq!(jwk.use_, "sig");
+        assert_eq!(jwk.alg, "ES256");
+        assert_eq!(jwk.kid, "test-kid-1");
+
+        // x and y should be 32 bytes base64url-encoded (43 chars without padding)
+        let x_bytes = URL_SAFE_NO_PAD.decode(&jwk.x).unwrap();
+        let y_bytes = URL_SAFE_NO_PAD.decode(&jwk.y).unwrap();
+        assert_eq!(x_bytes.len(), 32);
+        assert_eq!(y_bytes.len(), 32);
+
+        // Round-trip: reconstruct the public key from x,y and verify it matches
+        let mut uncompressed = vec![0x04]; // uncompressed point prefix
+        uncompressed.extend_from_slice(&x_bytes);
+        uncompressed.extend_from_slice(&y_bytes);
+
+        let reconstructed = p256::PublicKey::from_sec1_bytes(&uncompressed).unwrap();
+        let original = p256::PublicKey::from_public_key_pem(&keys.public_key_pem).unwrap();
+        assert_eq!(
+            reconstructed.to_encoded_point(false),
+            original.to_encoded_point(false)
+        );
     }
 
     #[test]

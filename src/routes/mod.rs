@@ -1,4 +1,5 @@
 mod health;
+mod jwks;
 mod login;
 mod logout;
 mod signup;
@@ -16,5 +17,6 @@ pub fn router(state: AppState) -> Router {
         .route("/signup", post(signup::handler))
         .route("/login", post(login::handler))
         .route("/logout", post(logout::handler))
+        .route("/.well-known/jwks.json", get(jwks::handler))
         .with_state(state)
 }

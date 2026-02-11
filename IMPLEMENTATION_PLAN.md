@@ -233,7 +233,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 1.4 — Add logout route
+### 1.4 — ~~Add logout route~~ DONE
 
 **Files:** new `src/routes/logout.rs`, `src/routes/mod.rs`, `src/db/session.rs`
 
@@ -254,7 +254,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 1.5 — Add TTL to Sessions table
+### 1.5 — ~~Add TTL to Sessions table~~ DONE
 
 **Files:** `cdk/lib/constructs/database.ts`, `src/session.rs`, `src/db/session.rs`
 
@@ -267,7 +267,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 1.6 — Add IP address tracking to sessions
+### 1.6 — ~~Add IP address tracking to sessions~~ DONE
 
 **Files:** `src/session.rs`, `src/db/session.rs`, `src/routes/signup.rs`, `src/routes/login.rs`
 
@@ -281,7 +281,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ## Phase 2: JWT Infrastructure
 
-### 2.1 — Add JWT dependencies and key loading
+### 2.1 — ~~Add JWT dependencies and key loading~~ DONE
 
 **Files:** `Cargo.toml`, new `src/jwt.rs`, `src/state.rs`
 
@@ -323,7 +323,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 2.3 — Implement JWKS endpoint
+### 2.3 — ~~Implement JWKS endpoint~~ DONE
 
 **Files:** `src/jwt.rs`, new `src/routes/jwks.rs`, `src/routes/mod.rs`
 

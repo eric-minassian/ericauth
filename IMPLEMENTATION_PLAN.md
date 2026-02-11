@@ -911,7 +911,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 6.5 — Add integration tests
+### 6.5 — ~~Add integration tests~~ DONE
 
 **Files:** new `tests/integration_test.rs`
 
@@ -931,7 +931,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 6.6 — CDK tests
+### 6.6 — ~~CDK tests~~ DONE
 
 **Files:** `cdk/test/cdk.test.ts`
 
@@ -941,7 +941,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 6.7 — Secrets Manager integration for JWT keys
+### 6.7 — ~~Secrets Manager integration for JWT keys~~ DONE
 
 **Files:** `Cargo.toml`, `src/jwt.rs`, `src/state.rs`, `cdk/lib/cdk-stack.ts`, `cdk/lib/constructs/lambda.ts`
 

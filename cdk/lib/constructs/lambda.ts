@@ -1,4 +1,5 @@
 import { TableV2 } from "aws-cdk-lib/aws-dynamodb";
+import { ISecret } from "aws-cdk-lib/aws-secretsmanager";
 import { RustFunction } from "cargo-lambda-cdk";
 import { Construct } from "constructs";
 
@@ -15,6 +16,7 @@ interface LambdaProps {
   clientsTable: TableV2;
   authCodesTable: TableV2;
   rateLimitsTable: TableV2;
+  jwtSecret: ISecret;
 }
 
 export class Lambda extends Construct {
@@ -35,6 +37,7 @@ export class Lambda extends Construct {
         CLIENTS_TABLE_NAME: props.clientsTable.tableName,
         AUTH_CODES_TABLE_NAME: props.authCodesTable.tableName,
         RATE_LIMITS_TABLE_NAME: props.rateLimitsTable.tableName,
+        JWT_SECRET_ARN: props.jwtSecret.secretArn,
       },
     });
 
@@ -46,5 +49,6 @@ export class Lambda extends Construct {
     props.clientsTable.grantReadData(this.handler);
     props.authCodesTable.grantReadWriteData(this.handler);
     props.rateLimitsTable.grantReadWriteData(this.handler);
+    props.jwtSecret.grantRead(this.handler);
   }
 }

@@ -8,6 +8,7 @@ interface DatabaseProps {
 export class Database extends Construct {
   public readonly usersTable: TableV2;
   public readonly sessionsTable: TableV2;
+  public readonly refreshTokensTable: TableV2;
 
   constructor(scope: Construct, id: string, props: DatabaseProps) {
     super(scope, id);
@@ -28,6 +29,12 @@ export class Database extends Construct {
     this.sessionsTable = new TableV2(this, "SessionsTable", {
       tableName: `${prefix}-sessions`,
       partitionKey: { name: "id", type: AttributeType.STRING },
+      timeToLiveAttribute: "expires_at",
+    });
+
+    this.refreshTokensTable = new TableV2(this, "RefreshTokensTable", {
+      tableName: `${prefix}-refresh-tokens`,
+      partitionKey: { name: "token_hash", type: AttributeType.STRING },
       timeToLiveAttribute: "expires_at",
     });
   }

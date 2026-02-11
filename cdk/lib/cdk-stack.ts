@@ -30,6 +30,7 @@ export class EricAuthStack extends Stack {
     const lambda = new Lambda(this, "Lambda", {
       usersTable: database.usersTable,
       sessionsTable: database.sessionsTable,
+      refreshTokensTable: database.refreshTokensTable,
     });
 
     if (props.domainName && props.hostedZoneDomain) {

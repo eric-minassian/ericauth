@@ -9,6 +9,7 @@ const manifestPath = path.join(__dirname, "..", "..", "..");
 interface LambdaProps {
   usersTable: TableV2;
   sessionsTable: TableV2;
+  refreshTokensTable: TableV2;
 }
 
 export class Lambda extends Construct {
@@ -23,10 +24,12 @@ export class Lambda extends Construct {
       environment: {
         USERS_TABLE_NAME: props.usersTable.tableName,
         SESSIONS_TABLE_NAME: props.sessionsTable.tableName,
+        REFRESH_TOKENS_TABLE_NAME: props.refreshTokensTable.tableName,
       },
     });
 
     props.usersTable.grantReadWriteData(this.handler);
     props.sessionsTable.grantReadWriteData(this.handler);
+    props.refreshTokensTable.grantReadWriteData(this.handler);
   }
 }

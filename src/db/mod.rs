@@ -1,4 +1,5 @@
 pub mod memory;
+pub mod refresh_token;
 pub mod session;
 pub mod user;
 
@@ -8,6 +9,7 @@ use uuid::Uuid;
 
 use crate::error::AuthError;
 
+use self::refresh_token::RefreshTokenTable;
 use self::user::UserTable;
 
 /// Database abstraction that can be backed by DynamoDB (production) or
@@ -25,6 +27,7 @@ pub struct DynamoDb {
     pub users_table: String,
     pub users_email_index: String,
     pub sessions_table: String,
+    pub refresh_tokens_table: String,
 }
 
 impl Database {
@@ -39,6 +42,8 @@ impl Database {
                 .unwrap_or_else(|_| "emailIndex".to_string()),
             sessions_table: env::var("SESSIONS_TABLE_NAME")
                 .unwrap_or_else(|_| "SessionsTable".to_string()),
+            refresh_tokens_table: env::var("REFRESH_TOKENS_TABLE_NAME")
+                .unwrap_or_else(|_| "RefreshTokensTable".to_string()),
         })
     }
 
@@ -125,5 +130,29 @@ impl Database {
         }
 
         Ok(session)
+    }
+
+    pub async fn insert_refresh_token(&self, token: &RefreshTokenTable) -> Result<(), AuthError> {
+        match self {
+            Database::Dynamo(db) => db.insert_refresh_token(token).await,
+            Database::Memory(db) => db.insert_refresh_token(token).await,
+        }
+    }
+
+    pub async fn get_refresh_token(
+        &self,
+        token_hash: &str,
+    ) -> Result<Option<RefreshTokenTable>, AuthError> {
+        match self {
+            Database::Dynamo(db) => db.get_refresh_token(token_hash).await,
+            Database::Memory(db) => db.get_refresh_token(token_hash).await,
+        }
+    }
+
+    pub async fn revoke_refresh_token(&self, token_hash: &str) -> Result<(), AuthError> {
+        match self {
+            Database::Dynamo(db) => db.revoke_refresh_token(token_hash).await,
+            Database::Memory(db) => db.revoke_refresh_token(token_hash).await,
+        }
     }
 }

@@ -374,7 +374,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 2.5 — Add refresh token storage and rotation
+### 2.5 — ~~Add refresh token storage and rotation~~ DONE
 
 **Files:** new `src/refresh_token.rs`, new `src/db/refresh_token.rs`, `src/db/mod.rs`, `src/state.rs`, `cdk/lib/constructs/database.ts`, `cdk/lib/constructs/lambda.ts`
 

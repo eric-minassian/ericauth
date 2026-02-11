@@ -5,6 +5,8 @@ use uuid::Uuid;
 
 use crate::error::AuthError;
 
+use super::auth_code::AuthCodeTable;
+use super::client::ClientTable;
 use super::credential::CredentialTable;
 use super::refresh_token::RefreshTokenTable;
 use super::session::SessionTable;
@@ -26,6 +28,8 @@ pub struct MemoryDb {
     refresh_tokens: Arc<RwLock<HashMap<String, RefreshTokenTable>>>,
     credentials: Arc<RwLock<HashMap<String, CredentialTable>>>,
     challenges: Arc<RwLock<HashMap<String, ChallengeRecord>>>,
+    clients: Arc<RwLock<HashMap<String, ClientTable>>>,
+    auth_codes: Arc<RwLock<HashMap<String, AuthCodeTable>>>,
 }
 
 impl MemoryDb {
@@ -36,6 +40,8 @@ impl MemoryDb {
             refresh_tokens: Arc::new(RwLock::new(HashMap::new())),
             credentials: Arc::new(RwLock::new(HashMap::new())),
             challenges: Arc::new(RwLock::new(HashMap::new())),
+            clients: Arc::new(RwLock::new(HashMap::new())),
+            auth_codes: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -312,6 +318,66 @@ impl MemoryDb {
         }
 
         Ok(record.challenge_data)
+    }
+
+    // --- Client operations ---
+
+    pub async fn get_client(&self, client_id: &str) -> Result<Option<ClientTable>, AuthError> {
+        let clients = self
+            .clients
+            .read()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        Ok(clients.get(client_id).cloned())
+    }
+
+    /// Insert a client (for testing purposes).
+    pub async fn insert_client(&self, client: ClientTable) -> Result<(), AuthError> {
+        let mut clients = self
+            .clients
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        clients.insert(client.client_id.clone(), client);
+        Ok(())
+    }
+
+    // --- Auth code operations ---
+
+    pub async fn insert_auth_code(&self, auth_code: &AuthCodeTable) -> Result<(), AuthError> {
+        let mut codes = self
+            .auth_codes
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        codes.insert(auth_code.code.clone(), auth_code.clone());
+        Ok(())
+    }
+
+    pub async fn redeem_auth_code(&self, code: &str) -> Result<Option<AuthCodeTable>, AuthError> {
+        let mut codes = self
+            .auth_codes
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        let auth_code = match codes.get(code) {
+            Some(ac) => ac.clone(),
+            None => return Ok(None),
+        };
+
+        // Check if already used
+        if auth_code.used_at.is_some() {
+            return Ok(None);
+        }
+
+        // Check if expired
+        if auth_code.expires_at <= chrono::Utc::now().timestamp() {
+            return Ok(None);
+        }
+
+        // Mark as used
+        if let Some(ac) = codes.get_mut(code) {
+            ac.used_at = Some(chrono::Utc::now().timestamp());
+        }
+
+        Ok(Some(auth_code))
     }
 }
 

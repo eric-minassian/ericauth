@@ -32,6 +32,7 @@ url = "2"
 uuid = { version = "1.13.1", features = ["v4", "fast-rng", "serde"] }
 askama = "0.15"
 openssl = { version = "0.10", features = ["vendored"] }
+urlencoding = "2"
 webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"] }
 
 [lints.rust]

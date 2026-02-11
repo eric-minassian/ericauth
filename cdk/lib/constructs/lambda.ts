@@ -14,6 +14,7 @@ interface LambdaProps {
   challengesTable: TableV2;
   clientsTable: TableV2;
   authCodesTable: TableV2;
+  rateLimitsTable: TableV2;
 }
 
 export class Lambda extends Construct {
@@ -33,6 +34,7 @@ export class Lambda extends Construct {
         CHALLENGES_TABLE_NAME: props.challengesTable.tableName,
         CLIENTS_TABLE_NAME: props.clientsTable.tableName,
         AUTH_CODES_TABLE_NAME: props.authCodesTable.tableName,
+        RATE_LIMITS_TABLE_NAME: props.rateLimitsTable.tableName,
       },
     });
 
@@ -43,5 +45,6 @@ export class Lambda extends Construct {
     props.challengesTable.grantReadWriteData(this.handler);
     props.clientsTable.grantReadData(this.handler);
     props.authCodesTable.grantReadWriteData(this.handler);
+    props.rateLimitsTable.grantReadWriteData(this.handler);
   }
 }

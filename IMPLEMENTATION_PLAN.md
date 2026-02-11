@@ -885,7 +885,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 6.4 — Add rate limiting
+### 6.4 — ~~Add rate limiting~~ DONE
 
 **Files:** new `src/middleware/rate_limit.rs`, `cdk/lib/constructs/database.ts`, `cdk/lib/constructs/lambda.ts`, `src/routes/mod.rs`
 

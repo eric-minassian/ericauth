@@ -1,11 +1,21 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    Json,
+};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use webauthn_rs::prelude::*;
 
-use crate::{error::AuthError, middleware::auth::AuthenticatedUser, state::AppState};
+use crate::{
+    error::AuthError,
+    middleware::auth::AuthenticatedUser,
+    session::{create_session, generate_session_token, session_cookie},
+    state::AppState,
+};
 
 // --- Registration ---
 
@@ -115,4 +125,154 @@ pub async fn register_complete(
         .await?;
 
     Ok(StatusCode::CREATED)
+}
+
+// --- Authentication ---
+
+#[derive(Deserialize)]
+pub struct AuthBeginPayload {
+    email: String,
+}
+
+#[derive(Serialize)]
+pub struct AuthBeginResponse {
+    challenge_id: String,
+    options: RequestChallengeResponse,
+}
+
+/// Stored alongside the challenge so we know which user is authenticating.
+#[derive(Serialize, Deserialize)]
+struct AuthChallengeState {
+    user_id: String,
+    passkey_authentication: PasskeyAuthentication,
+}
+
+pub async fn auth_begin(
+    State(state): State<AppState>,
+    Json(body): Json<AuthBeginPayload>,
+) -> Result<impl IntoResponse, AuthError> {
+    // Look up user by email
+    let user = state
+        .db
+        .get_user_by_email(body.email)
+        .await?
+        .ok_or_else(|| AuthError::Unauthorized("invalid email or passkey".into()))?;
+
+    // Load credentials for the user
+    let cred_records = state
+        .db
+        .get_credentials_by_user_id(&user.id.to_string())
+        .await?;
+
+    if cred_records.is_empty() {
+        return Err(AuthError::Unauthorized("no passkeys registered".into()));
+    }
+
+    let passkeys: Vec<Passkey> = cred_records
+        .iter()
+        .filter_map(|c| serde_json::from_str(&c.passkey_json).ok())
+        .collect();
+
+    if passkeys.is_empty() {
+        return Err(AuthError::Internal("failed to deserialize passkeys".into()));
+    }
+
+    let (rcr, passkey_authentication) = state
+        .webauthn
+        .start_passkey_authentication(&passkeys)
+        .map_err(|e| AuthError::Internal(format!("WebAuthn authentication start failed: {e}")))?;
+
+    // Store the authentication state as a challenge (5 min TTL)
+    let challenge_id = Uuid::new_v4().to_string();
+    let challenge_state = AuthChallengeState {
+        user_id: user.id.to_string(),
+        passkey_authentication,
+    };
+    let challenge_data = serde_json::to_string(&challenge_state)
+        .map_err(|e| AuthError::Internal(format!("Failed to serialize auth state: {e}")))?;
+
+    state
+        .db
+        .insert_challenge(&challenge_id, &challenge_data, 300)
+        .await?;
+
+    Ok(Json(AuthBeginResponse {
+        challenge_id,
+        options: rcr,
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct AuthCompletePayload {
+    challenge_id: String,
+    credential: PublicKeyCredential,
+}
+
+pub async fn auth_complete(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<AuthCompletePayload>,
+) -> Result<impl IntoResponse, AuthError> {
+    // Retrieve and delete the challenge (single-use)
+    let challenge_data = state
+        .db
+        .get_and_delete_challenge(&body.challenge_id)
+        .await?;
+
+    let challenge_state: AuthChallengeState = serde_json::from_str(&challenge_data)
+        .map_err(|e| AuthError::Internal(format!("Failed to deserialize auth state: {e}")))?;
+
+    // Complete authentication
+    let auth_result = state
+        .webauthn
+        .finish_passkey_authentication(&body.credential, &challenge_state.passkey_authentication)
+        .map_err(|e| AuthError::Unauthorized(format!("WebAuthn authentication failed: {e}")))?;
+
+    // If credential needs updating (e.g. sign count), update it
+    if auth_result.needs_update() {
+        // Reload the credential and update it
+        let user_id = &challenge_state.user_id;
+        let cred_records = state.db.get_credentials_by_user_id(user_id).await?;
+
+        for cred in &cred_records {
+            if let Ok(mut passkey) = serde_json::from_str::<Passkey>(&cred.passkey_json) {
+                if passkey.cred_id() == auth_result.cred_id() {
+                    passkey.update_credential(&auth_result);
+                    if let Ok(updated_json) = serde_json::to_string(&passkey) {
+                        let _ = state
+                            .db
+                            .update_credential(&cred.credential_id, &updated_json)
+                            .await;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    // Extract client IP
+    let client_ip = headers
+        .get("X-Forwarded-For")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("unknown")
+        .to_string();
+
+    // Create session
+    let user_uuid = Uuid::parse_str(&challenge_state.user_id)
+        .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
+
+    let session_token = generate_session_token()?;
+    let session = create_session(&state.db, session_token.clone(), user_uuid, client_ip).await?;
+
+    // Build response with session cookie
+    let (cookie_name, cookie_value) = session_cookie(&session_token, session.expires_at);
+    let mut response_headers = HeaderMap::new();
+    response_headers.insert(
+        cookie_name,
+        cookie_value
+            .parse()
+            .map_err(|e| AuthError::Internal(format!("Failed to build cookie header: {e}")))?,
+    );
+
+    Ok((StatusCode::NO_CONTENT, response_headers))
 }

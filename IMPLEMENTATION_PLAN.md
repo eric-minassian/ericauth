@@ -536,7 +536,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 3.5 — Implement passkey authentication endpoints
+### 3.5 — ~~Implement passkey authentication endpoints~~ DONE
 
 **Files:** `src/routes/passkey.rs`
 

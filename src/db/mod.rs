@@ -1,3 +1,5 @@
+pub mod challenge;
+pub mod credential;
 pub mod memory;
 pub mod refresh_token;
 pub mod session;
@@ -9,6 +11,7 @@ use uuid::Uuid;
 
 use crate::error::AuthError;
 
+use self::credential::CredentialTable;
 use self::refresh_token::RefreshTokenTable;
 use self::user::UserTable;
 
@@ -169,6 +172,81 @@ impl Database {
         match self {
             Database::Dynamo(db) => db.revoke_refresh_token(token_hash).await,
             Database::Memory(db) => db.revoke_refresh_token(token_hash).await,
+        }
+    }
+
+    // --- Credential operations ---
+
+    pub async fn insert_credential(
+        &self,
+        credential_id: &str,
+        user_id: &str,
+        passkey_json: &str,
+    ) -> Result<(), AuthError> {
+        match self {
+            Database::Dynamo(db) => {
+                db.insert_credential(credential_id, user_id, passkey_json)
+                    .await
+            }
+            Database::Memory(db) => {
+                db.insert_credential(credential_id, user_id, passkey_json)
+                    .await
+            }
+        }
+    }
+
+    pub async fn get_credentials_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<CredentialTable>, AuthError> {
+        match self {
+            Database::Dynamo(db) => db.get_credentials_by_user_id(user_id).await,
+            Database::Memory(db) => db.get_credentials_by_user_id(user_id).await,
+        }
+    }
+
+    pub async fn update_credential(
+        &self,
+        credential_id: &str,
+        passkey_json: &str,
+    ) -> Result<(), AuthError> {
+        match self {
+            Database::Dynamo(db) => db.update_credential(credential_id, passkey_json).await,
+            Database::Memory(db) => db.update_credential(credential_id, passkey_json).await,
+        }
+    }
+
+    pub async fn delete_credential(&self, credential_id: &str) -> Result<(), AuthError> {
+        match self {
+            Database::Dynamo(db) => db.delete_credential(credential_id).await,
+            Database::Memory(db) => db.delete_credential(credential_id).await,
+        }
+    }
+
+    // --- Challenge operations ---
+
+    pub async fn insert_challenge(
+        &self,
+        challenge_id: &str,
+        challenge_data: &str,
+        ttl_seconds: i64,
+    ) -> Result<(), AuthError> {
+        match self {
+            Database::Dynamo(db) => {
+                db.insert_challenge(challenge_id, challenge_data, ttl_seconds)
+                    .await
+            }
+            Database::Memory(db) => {
+                db.insert_challenge(challenge_id, challenge_data, ttl_seconds)
+                    .await
+            }
+        }
+    }
+
+    pub async fn get_and_delete_challenge(&self, challenge_id: &str) -> Result<String, AuthError> {
+        match self {
+            Database::Dynamo(db) => db.get_and_delete_challenge(challenge_id).await,
+            Database::Memory(db) => db.get_and_delete_challenge(challenge_id).await,
         }
     }
 }

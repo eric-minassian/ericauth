@@ -3,6 +3,7 @@ mod jwks;
 mod login;
 mod logout;
 mod signup;
+mod token_revoke;
 
 use axum::{
     routing::{get, post},
@@ -18,5 +19,6 @@ pub fn router(state: AppState) -> Router {
         .route("/login", post(login::handler))
         .route("/logout", post(logout::handler))
         .route("/.well-known/jwks.json", get(jwks::handler))
+        .route("/token/revoke", post(token_revoke::handler))
         .with_state(state)
 }

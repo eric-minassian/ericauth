@@ -426,7 +426,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 2.7 — Implement `/token/revoke` endpoint
+### 2.7 — ~~Implement `/token/revoke` endpoint~~ DONE
 
 **Files:** new `src/routes/token_revoke.rs`, `src/routes/mod.rs`
 

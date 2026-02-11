@@ -5,6 +5,7 @@ import {
 } from "aws-cdk-lib/aws-certificatemanager";
 import { ARecord, HostedZone, RecordTarget } from "aws-cdk-lib/aws-route53";
 import { ApiGatewayv2DomainProperties } from "aws-cdk-lib/aws-route53-targets";
+import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
 import { Api } from "./constructs/api";
 import { Database } from "./constructs/database";
@@ -27,6 +28,11 @@ export class EricAuthStack extends Stack {
       envName: props.envName,
     });
 
+    const jwtSecret = new secretsmanager.Secret(this, "JwtPrivateKey", {
+      secretName: `ericauth-${props.envName}-jwt-private-key`,
+      description: "ES256 private key PEM for JWT signing",
+    });
+
     const lambda = new Lambda(this, "Lambda", {
       usersTable: database.usersTable,
       sessionsTable: database.sessionsTable,
@@ -36,6 +42,7 @@ export class EricAuthStack extends Stack {
       clientsTable: database.clientsTable,
       authCodesTable: database.authCodesTable,
       rateLimitsTable: database.rateLimitsTable,
+      jwtSecret,
     });
 
     if (props.domainName && props.hostedZoneDomain) {

@@ -513,7 +513,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 3.4 — Implement passkey registration endpoints
+### 3.4 — ~~Implement passkey registration endpoints~~ DONE
 
 **Files:** new `src/routes/passkey.rs`, `src/routes/mod.rs`
 

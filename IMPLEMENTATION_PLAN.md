@@ -607,7 +607,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 4.2 — Implement login page
+### 4.2 — ~~Implement login page~~ DONE
 
 **Files:** new `templates/login.html`, new `src/routes/login_page.rs`, `src/routes/mod.rs`
 

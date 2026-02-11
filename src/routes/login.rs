@@ -70,7 +70,13 @@ pub async fn handler(
     // Create session
     let session_token = generate_session_token()?;
 
-    let session = create_session(&state.db, session_token.clone(), user.id).await?;
+    let session = create_session(
+        &state.db,
+        session_token.clone(),
+        user.id,
+        client_ip.to_string(),
+    )
+    .await?;
 
     // Build response with session cookie
     let (cookie_name, cookie_value) = session_cookie(&session_token, session.expires_at);

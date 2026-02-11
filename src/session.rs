@@ -24,6 +24,7 @@ pub async fn create_session(
     db: &Database,
     token: String,
     user_id: Uuid,
+    ip_address: String,
 ) -> Result<Session, AuthError> {
     let hasher = Sha256::new();
     let session_id = hex::encode(hasher.chain(token.as_bytes()).finalize());
@@ -36,7 +37,8 @@ pub async fn create_session(
         expires_at,
     };
 
-    db.insert_session(session_id, user_id, expires_at).await?;
+    db.insert_session(session_id, user_id, expires_at, ip_address)
+        .await?;
 
     Ok(session)
 }

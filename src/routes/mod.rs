@@ -45,11 +45,16 @@ pub fn router(state: AppState) -> Router {
         ])
         .allow_credentials(true);
 
-    // API routes that need CORS (token endpoints, well-known endpoints)
+    // API routes that need CORS (token endpoints, well-known endpoints, userinfo)
     let cors_routes = Router::new()
         .route("/token", post(token::handler))
         .route("/token/revoke", post(token_revoke::handler))
         .route("/.well-known/jwks.json", get(jwks::handler))
+        .route(
+            "/.well-known/openid-configuration",
+            get(openid_config::handler),
+        )
+        .route("/userinfo", get(userinfo::handler).post(userinfo::handler))
         .layer(cors);
 
     // Rate-limited routes (login and signup)
@@ -78,11 +83,6 @@ pub fn router(state: AppState) -> Router {
         .route("/passkeys/auth/begin", post(passkey::auth_begin))
         .route("/passkeys/auth/complete", post(passkey::auth_complete))
         .route("/authorize", get(authorize::handler))
-        .route(
-            "/.well-known/openid-configuration",
-            get(openid_config::handler),
-        )
-        .route("/userinfo", get(userinfo::handler).post(userinfo::handler))
         .route("/recover", post(recover::handler));
 
     Router::new()

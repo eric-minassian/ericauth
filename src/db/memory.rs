@@ -5,9 +5,17 @@ use uuid::Uuid;
 
 use crate::error::AuthError;
 
+use super::credential::CredentialTable;
 use super::refresh_token::RefreshTokenTable;
 use super::session::SessionTable;
 use super::user::UserTable;
+
+/// In-memory challenge record.
+#[derive(Clone)]
+pub struct ChallengeRecord {
+    pub challenge_data: String,
+    pub expires_at: i64,
+}
 
 /// In-memory database backend for local development and testing.
 /// Uses `Arc<RwLock<...>>` so it can be `Clone`d across axum handlers.
@@ -16,6 +24,8 @@ pub struct MemoryDb {
     users: Arc<RwLock<HashMap<Uuid, UserTable>>>,
     sessions: Arc<RwLock<HashMap<String, SessionTable>>>,
     refresh_tokens: Arc<RwLock<HashMap<String, RefreshTokenTable>>>,
+    credentials: Arc<RwLock<HashMap<String, CredentialTable>>>,
+    challenges: Arc<RwLock<HashMap<String, ChallengeRecord>>>,
 }
 
 impl MemoryDb {
@@ -24,6 +34,8 @@ impl MemoryDb {
             users: Arc::new(RwLock::new(HashMap::new())),
             sessions: Arc::new(RwLock::new(HashMap::new())),
             refresh_tokens: Arc::new(RwLock::new(HashMap::new())),
+            credentials: Arc::new(RwLock::new(HashMap::new())),
+            challenges: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -183,6 +195,121 @@ impl MemoryDb {
         }
 
         Ok(())
+    }
+
+    // --- Credential operations ---
+
+    pub async fn insert_credential(
+        &self,
+        credential_id: &str,
+        user_id: &str,
+        passkey_json: &str,
+    ) -> Result<(), AuthError> {
+        let mut creds = self
+            .credentials
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        if creds.contains_key(credential_id) {
+            return Err(AuthError::Conflict("credential already exists".to_string()));
+        }
+
+        creds.insert(
+            credential_id.to_string(),
+            CredentialTable {
+                credential_id: credential_id.to_string(),
+                user_id: user_id.to_string(),
+                passkey_json: passkey_json.to_string(),
+            },
+        );
+
+        Ok(())
+    }
+
+    pub async fn get_credentials_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<CredentialTable>, AuthError> {
+        let creds = self
+            .credentials
+            .read()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        Ok(creds
+            .values()
+            .filter(|c| c.user_id == user_id)
+            .cloned()
+            .collect())
+    }
+
+    pub async fn update_credential(
+        &self,
+        credential_id: &str,
+        passkey_json: &str,
+    ) -> Result<(), AuthError> {
+        let mut creds = self
+            .credentials
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        let cred = creds
+            .get_mut(credential_id)
+            .ok_or_else(|| AuthError::NotFound("credential not found".to_string()))?;
+
+        cred.passkey_json = passkey_json.to_string();
+        Ok(())
+    }
+
+    pub async fn delete_credential(&self, credential_id: &str) -> Result<(), AuthError> {
+        let mut creds = self
+            .credentials
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        creds.remove(credential_id);
+        Ok(())
+    }
+
+    // --- Challenge operations ---
+
+    pub async fn insert_challenge(
+        &self,
+        challenge_id: &str,
+        challenge_data: &str,
+        ttl_seconds: i64,
+    ) -> Result<(), AuthError> {
+        let expires_at = chrono::Utc::now().timestamp() + ttl_seconds;
+
+        let mut challenges = self
+            .challenges
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        challenges.insert(
+            challenge_id.to_string(),
+            ChallengeRecord {
+                challenge_data: challenge_data.to_string(),
+                expires_at,
+            },
+        );
+
+        Ok(())
+    }
+
+    pub async fn get_and_delete_challenge(&self, challenge_id: &str) -> Result<String, AuthError> {
+        let mut challenges = self
+            .challenges
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        let record = challenges
+            .remove(challenge_id)
+            .ok_or_else(|| AuthError::NotFound("challenge not found".into()))?;
+
+        if record.expires_at <= chrono::Utc::now().timestamp() {
+            return Err(AuthError::NotFound("challenge expired".into()));
+        }
+
+        Ok(record.challenge_data)
     }
 }
 

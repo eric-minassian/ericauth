@@ -86,6 +86,13 @@ impl Database {
         }
     }
 
+    pub async fn delete_session(&self, session_id: &str) -> Result<(), AuthError> {
+        match self {
+            Database::Dynamo(db) => db.delete_session(session_id).await,
+            Database::Memory(db) => db.delete_session(session_id).await,
+        }
+    }
+
     pub async fn get_session_by_token(
         &self,
         token: &str,

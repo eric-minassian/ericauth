@@ -42,6 +42,18 @@ impl DynamoDb {
         Ok(())
     }
 
+    pub async fn delete_session(&self, id: &str) -> Result<(), AuthError> {
+        self.client
+            .delete_item()
+            .table_name(&self.sessions_table)
+            .key("id", AttributeValue::S(id.to_string()))
+            .send()
+            .await
+            .map_err(|e| AuthError::Internal(format!("Failed to delete session: {e}")))?;
+
+        Ok(())
+    }
+
     pub async fn get_session_by_id(&self, id: &str) -> Result<Option<SessionTable>, AuthError> {
         let response = self
             .client

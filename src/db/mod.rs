@@ -85,4 +85,26 @@ impl Database {
             Database::Memory(db) => db.insert_session(id, user_id, expires_at).await,
         }
     }
+
+    pub async fn get_session_by_token(
+        &self,
+        token: &str,
+    ) -> Result<session::SessionTable, AuthError> {
+        use sha2::{digest::Update, Digest, Sha256};
+
+        let session_id = hex::encode(Sha256::new().chain(token.as_bytes()).finalize());
+
+        let session = match self {
+            Database::Dynamo(db) => db.get_session_by_id(&session_id).await?,
+            Database::Memory(db) => db.get_session_by_id(&session_id).await?,
+        };
+
+        let session = session.ok_or_else(|| AuthError::Unauthorized("invalid session".into()))?;
+
+        if session.expires_at <= chrono::Utc::now() {
+            return Err(AuthError::Unauthorized("session expired".into()));
+        }
+
+        Ok(session)
+    }
 }

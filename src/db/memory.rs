@@ -83,6 +83,14 @@ impl MemoryDb {
 
         Ok(())
     }
+
+    pub async fn get_session_by_id(&self, id: &str) -> Result<Option<SessionTable>, AuthError> {
+        let sessions = self
+            .sessions
+            .read()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        Ok(sessions.get(id).cloned())
+    }
 }
 
 impl Default for MemoryDb {

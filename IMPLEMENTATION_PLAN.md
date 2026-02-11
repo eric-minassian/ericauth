@@ -181,7 +181,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 1.2 — Add `created_at` and `updated_at` timestamps to Users
+### 1.2 — ~~Add `created_at` and `updated_at` timestamps to Users~~ DONE
 
 **Files:** `src/user.rs`, `src/db/user.rs`
 
@@ -194,7 +194,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 1.3 — Add session validation as axum middleware
+### 1.3 — ~~Add session validation as axum middleware~~ DONE
 
 **Files:** new `src/middleware/mod.rs`, new `src/middleware/auth.rs`, `src/db/session.rs`, `src/session.rs`, `src/lib.rs`
 

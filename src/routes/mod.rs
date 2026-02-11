@@ -4,6 +4,7 @@ mod jwks;
 mod login;
 mod login_page;
 mod logout;
+mod passkeys_page;
 mod signup;
 mod signup_page;
 mod token;
@@ -26,6 +27,7 @@ pub fn router(state: AppState) -> Router {
             "/consent",
             get(consent::get_handler).post(consent::post_handler),
         )
+        .route("/passkeys/manage", get(passkeys_page::handler))
         .route("/token", post(token::handler))
         .route("/token/revoke", post(token_revoke::handler))
         .route("/.well-known/jwks.json", get(jwks::handler))

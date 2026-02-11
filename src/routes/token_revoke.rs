@@ -38,6 +38,7 @@ mod tests {
         AppState {
             db: Database::memory(),
             jwt_keys: None,
+            webauthn: std::sync::Arc::new(crate::webauthn_config::build_webauthn().unwrap()),
         }
     }
 

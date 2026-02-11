@@ -1,10 +1,11 @@
 use std::env;
 
-use crate::db::Database;
+use crate::{db::Database, jwt::JwtKeys};
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: Database,
+    pub jwt_keys: Option<JwtKeys>,
 }
 
 impl AppState {
@@ -19,6 +20,27 @@ impl AppState {
                 Database::dynamo().await
             }
         };
-        Self { db }
+
+        let jwt_keys = match env::var("JWT_PRIVATE_KEY") {
+            Ok(pem) => {
+                let kid = env::var("JWT_KEY_ID").unwrap_or_else(|_| "ericauth-key-1".to_string());
+                match JwtKeys::from_pem(pem.as_bytes(), &kid) {
+                    Ok(keys) => {
+                        tracing::info!("JWT keys loaded successfully");
+                        Some(keys)
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to load JWT keys: {e}");
+                        None
+                    }
+                }
+            }
+            Err(_) => {
+                tracing::info!("JWT_PRIVATE_KEY not set, JWT signing disabled");
+                None
+            }
+        };
+
+        Self { db, jwt_keys }
     }
 }

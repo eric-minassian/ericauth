@@ -28,5 +28,7 @@ pub fn router(state: AppState) -> Router {
             "/passkeys/register/complete",
             post(passkey::register_complete),
         )
+        .route("/passkeys/auth/begin", post(passkey::auth_begin))
+        .route("/passkeys/auth/complete", post(passkey::auth_complete))
         .with_state(state)
 }

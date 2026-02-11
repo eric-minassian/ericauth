@@ -8,6 +8,7 @@ pub mod refresh_token;
 pub mod routes;
 pub mod session;
 pub mod state;
+pub mod templates;
 pub mod user;
 pub mod validation;
 pub mod webauthn_config;

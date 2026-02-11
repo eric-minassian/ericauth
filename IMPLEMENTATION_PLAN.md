@@ -590,7 +590,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ## Phase 4: Hosted Auth UI
 
-### 4.1 — Add Askama templates and base layout
+### 4.1 — ~~Add Askama templates and base layout~~ DONE
 
 **Files:** `Cargo.toml`, new `templates/base.html`, new `src/templates.rs`
 
@@ -607,7 +607,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 4.2 — Implement login page
+### 4.2 — ~~Implement login page~~ DONE
 
 **Files:** new `templates/login.html`, new `src/routes/login_page.rs`, `src/routes/mod.rs`
 
@@ -623,7 +623,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 4.3 — Implement signup page
+### 4.3 — ~~Implement signup page~~ DONE
 
 **Files:** new `templates/signup.html`, new `src/routes/signup_page.rs`, `src/routes/mod.rs`
 
@@ -638,7 +638,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 4.4 — Implement error page template
+### 4.4 — ~~Implement error page template~~ DONE
 
 **Files:** new `templates/error.html`, `src/templates.rs`
 
@@ -649,7 +649,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 4.5 — Implement consent page
+### 4.5 — ~~Implement consent page~~ DONE
 
 **Files:** new `templates/consent.html`, new `src/routes/consent.rs`, `src/routes/mod.rs`
 
@@ -664,7 +664,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 4.6 — Add WebAuthn JavaScript for login page
+### 4.6 — ~~Add WebAuthn JavaScript for login page~~ DONE
 
 **Files:** `templates/login.html`
 
@@ -678,7 +678,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 4.7 — Add passkey management page
+### 4.7 — ~~Add passkey management page~~ DONE
 
 **Files:** new `templates/passkeys.html`, new `src/routes/passkeys_page.rs`, `src/routes/mod.rs`
 

@@ -16,6 +16,7 @@ use crate::{
 };
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct SignupPayload {
     email: String,
     password: String,
@@ -102,34 +103,18 @@ pub async fn handler(
 
     // If OAuth2 params are present, redirect to /authorize
     if body.client_id.is_some() && body.redirect_uri.is_some() {
-        let mut authorize_url = "/authorize?".to_string();
-        authorize_url.push_str(&format!(
-            "client_id={}&redirect_uri={}",
-            urlencoding::encode(body.client_id.as_deref().unwrap_or("")),
-            urlencoding::encode(body.redirect_uri.as_deref().unwrap_or("")),
-        ));
-        if let Some(rt) = &body.response_type {
-            authorize_url.push_str(&format!("&response_type={}", urlencoding::encode(rt)));
-        }
-        if let Some(sc) = &body.scope {
-            authorize_url.push_str(&format!("&scope={}", urlencoding::encode(sc)));
-        }
-        if let Some(s) = &body.state {
-            authorize_url.push_str(&format!("&state={}", urlencoding::encode(s)));
-        }
-        if let Some(cc) = &body.code_challenge {
-            authorize_url.push_str(&format!("&code_challenge={}", urlencoding::encode(cc)));
-        }
-        if let Some(ccm) = &body.code_challenge_method {
-            authorize_url.push_str(&format!(
-                "&code_challenge_method={}",
-                urlencoding::encode(ccm)
-            ));
-        }
-        if let Some(n) = &body.nonce {
-            authorize_url.push_str(&format!("&nonce={}", urlencoding::encode(n)));
-        }
-
+        let authorize_url = format!(
+            "/authorize?{}",
+            super::authorize::build_oauth_query_string(
+                body.client_id.as_deref().unwrap_or(""),
+                body.redirect_uri.as_deref().unwrap_or(""),
+                body.scope.as_deref().unwrap_or(""),
+                body.state.as_deref(),
+                body.code_challenge.as_deref().unwrap_or(""),
+                body.code_challenge_method.as_deref().unwrap_or(""),
+                body.nonce.as_deref(),
+            )
+        );
         return Ok((response_headers, Redirect::temporary(&authorize_url)).into_response());
     }
 

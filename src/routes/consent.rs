@@ -102,6 +102,17 @@ pub async fn post_handler(
         .redirect_uri
         .ok_or_else(|| AuthError::BadRequest("missing redirect_uri".into()))?;
 
+    // Re-validate redirect_uri against registered client to prevent open redirect
+    let client = state
+        .db
+        .get_client(&form.client_id)
+        .await?
+        .ok_or_else(|| AuthError::BadRequest("unknown client_id".into()))?;
+
+    if !client.redirect_uris.contains(&redirect_uri) {
+        return Err(AuthError::BadRequest("invalid redirect_uri".into()));
+    }
+
     if form.action == "deny" {
         let mut url = redirect_uri;
         url.push_str(if url.contains('?') { "&" } else { "?" });

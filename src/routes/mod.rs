@@ -8,6 +8,7 @@ mod logout;
 mod openid_config;
 mod passkey;
 mod passkeys_page;
+mod recover;
 mod signup;
 mod signup_page;
 mod token;
@@ -48,5 +49,6 @@ pub fn router(state: AppState) -> Router {
             get(openid_config::handler),
         )
         .route("/userinfo", get(userinfo::handler).post(userinfo::handler))
+        .route("/recover", post(recover::handler))
         .with_state(state)
 }

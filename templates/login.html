@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Log In — EricAuth{% endblock %}
+
+{% block content %}
+<h1>Log In</h1>
+
+{% if let Some(err) = error %}
+<div class="error-msg">{{ err }}</div>
+{% endif %}
+
+<form method="POST" action="/login">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" required autocomplete="email">
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" required autocomplete="current-password">
+
+    {% if let Some(uri) = redirect_uri %}
+    <input type="hidden" name="redirect_uri" value="{{ uri }}">
+    {% endif %}
+    {% if let Some(s) = state %}
+    <input type="hidden" name="state" value="{{ s }}">
+    {% endif %}
+    {% if let Some(cid) = client_id %}
+    <input type="hidden" name="client_id" value="{{ cid }}">
+    {% endif %}
+    {% if let Some(sc) = scope %}
+    <input type="hidden" name="scope" value="{{ sc }}">
+    {% endif %}
+    {% if let Some(rt) = response_type %}
+    <input type="hidden" name="response_type" value="{{ rt }}">
+    {% endif %}
+    {% if let Some(cc) = code_challenge %}
+    <input type="hidden" name="code_challenge" value="{{ cc }}">
+    {% endif %}
+    {% if let Some(ccm) = code_challenge_method %}
+    <input type="hidden" name="code_challenge_method" value="{{ ccm }}">
+    {% endif %}
+    {% if let Some(n) = nonce %}
+    <input type="hidden" name="nonce" value="{{ n }}">
+    {% endif %}
+
+    <button type="submit" class="btn btn-primary">Log In</button>
+</form>
+
+<button type="button" id="passkey-btn" class="btn btn-secondary" style="display:none;">Use a Passkey</button>
+
+<div class="link-row">
+    Don't have an account? <a href="/signup">Sign up</a>
+</div>
+{% endblock %}

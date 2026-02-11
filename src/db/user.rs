@@ -75,6 +75,26 @@ impl DynamoDb {
         Ok(user.id)
     }
 
+    pub async fn get_user_by_id(&self, user_id: &str) -> Result<Option<UserTable>, AuthError> {
+        let response = self
+            .client
+            .get_item()
+            .table_name(&self.users_table)
+            .key("id", AttributeValue::S(user_id.to_string()))
+            .send()
+            .await
+            .map_err(|e| AuthError::Internal(format!("DynamoDB get user failed: {e}")))?;
+
+        match response.item {
+            Some(item) => {
+                let user = from_item::<UserTable>(item)
+                    .map_err(|e| AuthError::Internal(format!("Failed to deserialize user: {e}")))?;
+                Ok(Some(user))
+            }
+            None => Ok(None),
+        }
+    }
+
     pub async fn update_user_scopes(
         &self,
         user_id: &str,

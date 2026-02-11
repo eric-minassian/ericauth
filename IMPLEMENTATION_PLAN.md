@@ -405,7 +405,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 2.6 — Implement `/token` endpoint (refresh_token grant only)
+### 2.6 — ~~Implement `/token` endpoint (refresh_token grant only)~~ DONE
 
 **Files:** new `src/routes/token.rs`, `src/routes/mod.rs`
 

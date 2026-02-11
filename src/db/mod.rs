@@ -79,6 +79,13 @@ impl Database {
         }
     }
 
+    pub async fn get_user_by_id(&self, user_id: &str) -> Result<Option<UserTable>, AuthError> {
+        match self {
+            Database::Dynamo(db) => db.get_user_by_id(user_id).await,
+            Database::Memory(db) => db.get_user_by_id(user_id).await,
+        }
+    }
+
     pub async fn update_user_scopes(
         &self,
         user_id: &str,

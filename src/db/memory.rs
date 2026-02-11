@@ -84,6 +84,16 @@ impl MemoryDb {
         Ok(())
     }
 
+    pub async fn delete_session(&self, id: &str) -> Result<(), AuthError> {
+        let mut sessions = self
+            .sessions
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        sessions.remove(id);
+
+        Ok(())
+    }
+
     pub async fn get_session_by_id(&self, id: &str) -> Result<Option<SessionTable>, AuthError> {
         let sessions = self
             .sessions

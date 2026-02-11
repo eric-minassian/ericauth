@@ -23,6 +23,7 @@
 {% endif %}
 
 <form method="POST" action="/consent">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="client_id" value="{{ client_id }}">
     {% if let Some(uri) = redirect_uri %}
     <input type="hidden" name="redirect_uri" value="{{ uri }}">
@@ -51,6 +52,7 @@
 </form>
 
 <form method="POST" action="/consent">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="client_id" value="{{ client_id }}">
     {% if let Some(uri) = redirect_uri %}
     <input type="hidden" name="redirect_uri" value="{{ uri }}">

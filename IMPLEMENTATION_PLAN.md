@@ -844,7 +844,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ## Phase 6: Polish & Hardening
 
-### 6.1 — Add CSRF protection as tower middleware
+### 6.1 — ~~Add CSRF protection as tower middleware~~ DONE
 
 **Files:** new `src/middleware/csrf.rs`, `src/middleware/mod.rs`, all templates
 

@@ -1,8 +1,8 @@
 use askama::Template;
-use axum::{extract::Query, response::IntoResponse};
+use axum::{extract::Query, response::IntoResponse, Extension};
 use serde::Deserialize;
 
-use crate::{error::AuthError, templates::render};
+use crate::{error::AuthError, middleware::csrf::CsrfToken, templates::render};
 
 #[derive(Deserialize)]
 pub struct LoginPageQuery {
@@ -20,6 +20,7 @@ pub struct LoginPageQuery {
 #[derive(Template)]
 #[template(path = "login.html")]
 struct LoginTemplate {
+    csrf_token: String,
     error: Option<String>,
     redirect_uri: Option<String>,
     state: Option<String>,
@@ -31,8 +32,12 @@ struct LoginTemplate {
     nonce: Option<String>,
 }
 
-pub async fn handler(Query(params): Query<LoginPageQuery>) -> Result<impl IntoResponse, AuthError> {
+pub async fn handler(
+    Extension(csrf): Extension<CsrfToken>,
+    Query(params): Query<LoginPageQuery>,
+) -> Result<impl IntoResponse, AuthError> {
     render(&LoginTemplate {
+        csrf_token: csrf.0,
         error: params.error,
         redirect_uri: params.redirect_uri,
         state: params.state,

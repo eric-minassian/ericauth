@@ -303,7 +303,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 2.2 — Implement JWT signing and verification
+### 2.2 — ~~Implement JWT signing and verification~~ DONE
 
 **Files:** `src/jwt.rs`
 

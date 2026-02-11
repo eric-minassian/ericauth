@@ -67,6 +67,17 @@ impl MemoryDb {
         Ok(id)
     }
 
+    pub async fn get_user_by_id(&self, user_id: &str) -> Result<Option<UserTable>, AuthError> {
+        let user_uuid = Uuid::parse_str(user_id)
+            .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
+
+        let users = self
+            .users
+            .read()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        Ok(users.get(&user_uuid).cloned())
+    }
+
     pub async fn update_user_scopes(
         &self,
         user_id: &str,

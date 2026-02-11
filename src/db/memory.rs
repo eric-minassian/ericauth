@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::error::AuthError;
 
+use super::refresh_token::RefreshTokenTable;
 use super::session::SessionTable;
 use super::user::UserTable;
 
@@ -14,6 +15,7 @@ use super::user::UserTable;
 pub struct MemoryDb {
     users: Arc<RwLock<HashMap<Uuid, UserTable>>>,
     sessions: Arc<RwLock<HashMap<String, SessionTable>>>,
+    refresh_tokens: Arc<RwLock<HashMap<String, RefreshTokenTable>>>,
 }
 
 impl MemoryDb {
@@ -21,6 +23,7 @@ impl MemoryDb {
         Self {
             users: Arc::new(RwLock::new(HashMap::new())),
             sessions: Arc::new(RwLock::new(HashMap::new())),
+            refresh_tokens: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -124,6 +127,51 @@ impl MemoryDb {
             .read()
             .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
         Ok(sessions.get(id).cloned())
+    }
+
+    pub async fn insert_refresh_token(&self, token: &RefreshTokenTable) -> Result<(), AuthError> {
+        let mut tokens = self
+            .refresh_tokens
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        tokens.insert(token.token_hash.clone(), token.clone());
+        Ok(())
+    }
+
+    pub async fn get_refresh_token(
+        &self,
+        token_hash: &str,
+    ) -> Result<Option<RefreshTokenTable>, AuthError> {
+        let tokens = self
+            .refresh_tokens
+            .read()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        match tokens.get(token_hash) {
+            Some(token) => {
+                if token.revoked {
+                    return Ok(None);
+                }
+                if token.expires_at <= chrono::Utc::now().timestamp() {
+                    return Ok(None);
+                }
+                Ok(Some(token.clone()))
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub async fn revoke_refresh_token(&self, token_hash: &str) -> Result<(), AuthError> {
+        let mut tokens = self
+            .refresh_tokens
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        if let Some(token) = tokens.get_mut(token_hash) {
+            token.revoked = true;
+        }
+
+        Ok(())
     }
 }
 

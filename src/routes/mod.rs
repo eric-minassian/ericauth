@@ -4,6 +4,7 @@ mod login;
 mod login_page;
 mod logout;
 mod signup;
+mod signup_page;
 mod token;
 mod token_revoke;
 
@@ -17,7 +18,7 @@ use crate::state::AppState;
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health::handler))
-        .route("/signup", post(signup::handler))
+        .route("/signup", get(signup_page::handler).post(signup::handler))
         .route("/login", get(login_page::handler).post(login::handler))
         .route("/logout", post(logout::handler))
         .route("/token", post(token::handler))

@@ -46,7 +46,84 @@
 
 <button type="button" id="passkey-btn" class="btn btn-secondary" style="display:none;">Use a Passkey</button>
 
+<div id="passkey-error" class="error-msg" style="display:none;"></div>
+
 <div class="link-row">
     Don't have an account? <a href="/signup">Sign up</a>
 </div>
+
+<script>
+(function() {
+    if (!window.PublicKeyCredential) return;
+    var btn = document.getElementById('passkey-btn');
+    var errEl = document.getElementById('passkey-error');
+    btn.style.display = 'block';
+
+    function toBase64Url(buf) {
+        var bytes = new Uint8Array(buf);
+        var str = '';
+        for (var i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
+        return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    function fromBase64Url(s) {
+        s = s.replace(/-/g, '+').replace(/_/g, '/');
+        while (s.length % 4) s += '=';
+        var bin = atob(s);
+        var arr = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return arr.buffer;
+    }
+
+    btn.addEventListener('click', async function() {
+        errEl.style.display = 'none';
+        try {
+            var beginRes = await fetch('/passkeys/auth/begin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: '{}'
+            });
+            if (!beginRes.ok) throw new Error('Failed to start passkey auth');
+            var beginData = await beginRes.json();
+
+            var options = beginData.options;
+            options.publicKey.challenge = fromBase64Url(options.publicKey.challenge);
+            if (options.publicKey.allowCredentials) {
+                options.publicKey.allowCredentials = options.publicKey.allowCredentials.map(function(c) {
+                    return { id: fromBase64Url(c.id), type: c.type };
+                });
+            }
+
+            var credential = await navigator.credentials.get(options);
+
+            var body = {
+                challenge_id: beginData.challenge_id,
+                credential: {
+                    id: credential.id,
+                    rawId: toBase64Url(credential.rawId),
+                    type: credential.type,
+                    response: {
+                        authenticatorData: toBase64Url(credential.response.authenticatorData),
+                        clientDataJSON: toBase64Url(credential.response.clientDataJSON),
+                        signature: toBase64Url(credential.response.signature),
+                        userHandle: credential.response.userHandle ? toBase64Url(credential.response.userHandle) : null
+                    }
+                }
+            };
+
+            var completeRes = await fetch('/passkeys/auth/complete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!completeRes.ok) throw new Error('Passkey authentication failed');
+
+            window.location.href = '/';
+        } catch (e) {
+            errEl.textContent = e.message || 'Passkey authentication failed';
+            errEl.style.display = 'block';
+        }
+    });
+})();
+</script>
 {% endblock %}

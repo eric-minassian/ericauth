@@ -223,6 +223,7 @@ mod tests {
                 now.clone(),
                 now,
                 vec!["openid".to_string(), "email".to_string()],
+                vec![],
             )
             .await
             .unwrap();

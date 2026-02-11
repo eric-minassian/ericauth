@@ -54,6 +54,7 @@ impl MemoryDb {
         created_at: String,
         updated_at: String,
         scopes: Vec<String>,
+        recovery_codes: Vec<String>,
     ) -> Result<Uuid, AuthError> {
         // Check uniqueness
         if self.get_user_by_email(email.clone()).await?.is_some() {
@@ -68,6 +69,7 @@ impl MemoryDb {
             created_at,
             updated_at,
             scopes,
+            recovery_codes,
         };
 
         let mut users = self

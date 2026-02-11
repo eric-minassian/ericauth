@@ -1,7 +1,10 @@
 use chrono::Utc;
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::{db::Database, error::AuthError, password::hash_password};
+use crate::{
+    db::Database, error::AuthError, generate_random_recovery_code, password::hash_password,
+};
 
 pub struct User {
     pub id: Uuid,
@@ -9,6 +12,7 @@ pub struct User {
     pub created_at: String,
     pub updated_at: String,
     pub scopes: Vec<String>,
+    pub recovery_codes: Vec<String>,
 }
 
 pub fn verify_username_input(username: &str) -> bool {
@@ -22,6 +26,17 @@ pub async fn create_user(
 ) -> Result<User, AuthError> {
     let password_hash = hash_password(&password).map_err(|e| AuthError::Internal(e.to_string()))?;
 
+    // Generate 8 recovery codes
+    let mut plaintext_codes = Vec::with_capacity(8);
+    let mut hashed_codes = Vec::with_capacity(8);
+    for _ in 0..8 {
+        let code =
+            generate_random_recovery_code().map_err(|e| AuthError::Internal(e.to_string()))?;
+        let hash = hex::encode(Sha256::digest(code.as_bytes()));
+        plaintext_codes.push(code);
+        hashed_codes.push(hash);
+    }
+
     let now = Utc::now().to_rfc3339();
     let scopes = vec![];
     let user_id = db
@@ -31,6 +46,7 @@ pub async fn create_user(
             now.clone(),
             now.clone(),
             scopes.clone(),
+            hashed_codes,
         )
         .await?;
 
@@ -40,6 +56,7 @@ pub async fn create_user(
         created_at: now.clone(),
         updated_at: now,
         scopes,
+        recovery_codes: plaintext_codes,
     })
 }
 

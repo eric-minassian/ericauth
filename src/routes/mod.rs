@@ -1,3 +1,4 @@
+mod consent;
 mod health;
 mod jwks;
 mod login;
@@ -21,6 +22,10 @@ pub fn router(state: AppState) -> Router {
         .route("/signup", get(signup_page::handler).post(signup::handler))
         .route("/login", get(login_page::handler).post(login::handler))
         .route("/logout", post(logout::handler))
+        .route(
+            "/consent",
+            get(consent::get_handler).post(consent::post_handler),
+        )
         .route("/token", post(token::handler))
         .route("/token/revoke", post(token_revoke::handler))
         .route("/.well-known/jwks.json", get(jwks::handler))

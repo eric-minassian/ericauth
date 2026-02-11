@@ -649,7 +649,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 4.5 — Implement consent page
+### 4.5 — ~~Implement consent page~~ DONE
 
 **Files:** new `templates/consent.html`, new `src/routes/consent.rs`, `src/routes/mod.rs`
 

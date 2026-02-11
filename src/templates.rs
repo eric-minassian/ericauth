@@ -25,3 +25,10 @@ pub fn render<T: Template>(tmpl: &T) -> Result<HtmlResponse, AuthError> {
         .map_err(|e| AuthError::Internal(format!("template render error: {e}")))?;
     Ok(HtmlResponse(html))
 }
+
+#[derive(Template)]
+#[template(path = "error.html")]
+pub struct ErrorTemplate {
+    pub title: String,
+    pub message: String,
+}

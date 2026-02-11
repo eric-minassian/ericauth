@@ -4,7 +4,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     error::AuthError,
@@ -19,6 +19,11 @@ use crate::{
 pub struct SignupPayload {
     email: String,
     password: String,
+}
+
+#[derive(Serialize)]
+pub struct SignupResponse {
+    recovery_codes: Vec<String>,
 }
 
 pub async fn handler(
@@ -86,5 +91,9 @@ pub async fn handler(
             .map_err(|e| AuthError::Internal(format!("Failed to build cookie header: {e}")))?,
     );
 
-    Ok((StatusCode::CREATED, response_headers))
+    let response_body = SignupResponse {
+        recovery_codes: user.recovery_codes,
+    };
+
+    Ok((StatusCode::CREATED, response_headers, Json(response_body)))
 }

@@ -16,10 +16,12 @@ mod token_revoke;
 mod userinfo;
 
 use axum::{
+    http::{HeaderValue, Method},
     middleware,
     routing::{get, post},
     Router,
 };
+use tower_http::cors::CorsLayer;
 
 use crate::{
     middleware::{csrf::csrf_middleware, security_headers::security_headers_middleware},
@@ -27,7 +29,28 @@ use crate::{
 };
 
 pub fn router(state: AppState) -> Router {
-    Router::new()
+    let cors = CorsLayer::new()
+        .allow_origin(
+            "https://auth.ericminassian.com"
+                .parse::<HeaderValue>()
+                .unwrap(),
+        )
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
+        ])
+        .allow_credentials(true);
+
+    // API routes that need CORS (token endpoints, well-known endpoints)
+    let cors_routes = Router::new()
+        .route("/token", post(token::handler))
+        .route("/token/revoke", post(token_revoke::handler))
+        .route("/.well-known/jwks.json", get(jwks::handler))
+        .layer(cors);
+
+    // All other routes (UI pages, JSON APIs that don't need CORS)
+    let other_routes = Router::new()
         .route("/health", get(health::handler))
         .route("/signup", get(signup_page::handler).post(signup::handler))
         .route("/login", get(login_page::handler).post(login::handler))
@@ -37,9 +60,6 @@ pub fn router(state: AppState) -> Router {
             get(consent::get_handler).post(consent::post_handler),
         )
         .route("/passkeys/manage", get(passkeys_page::handler))
-        .route("/token", post(token::handler))
-        .route("/token/revoke", post(token_revoke::handler))
-        .route("/.well-known/jwks.json", get(jwks::handler))
         .route("/passkeys/register/begin", post(passkey::register_begin))
         .route(
             "/passkeys/register/complete",
@@ -53,7 +73,11 @@ pub fn router(state: AppState) -> Router {
             get(openid_config::handler),
         )
         .route("/userinfo", get(userinfo::handler).post(userinfo::handler))
-        .route("/recover", post(recover::handler))
+        .route("/recover", post(recover::handler));
+
+    Router::new()
+        .merge(cors_routes)
+        .merge(other_routes)
         .layer(middleware::from_fn(csrf_middleware))
         .layer(middleware::from_fn(security_headers_middleware))
         .with_state(state)

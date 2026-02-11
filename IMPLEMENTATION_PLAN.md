@@ -497,7 +497,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 3.3 — Add Credentials and Challenges DB operations
+### 3.3 — ~~Add Credentials and Challenges DB operations~~ DONE
 
 **Files:** new `src/db/credential.rs`, new `src/db/challenge.rs`, `src/db/mod.rs`
 

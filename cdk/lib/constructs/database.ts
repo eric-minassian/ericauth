@@ -28,6 +28,7 @@ export class Database extends Construct {
     this.sessionsTable = new TableV2(this, "SessionsTable", {
       tableName: `${prefix}-sessions`,
       partitionKey: { name: "id", type: AttributeType.STRING },
+      timeToLiveAttribute: "expires_at",
     });
   }
 }

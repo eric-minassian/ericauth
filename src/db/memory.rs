@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use chrono::DateTime;
 use uuid::Uuid;
 
 use crate::error::AuthError;
@@ -67,7 +66,7 @@ impl MemoryDb {
         &self,
         id: String,
         user_id: Uuid,
-        expires_at: DateTime<chrono::Utc>,
+        expires_at: i64,
     ) -> Result<(), AuthError> {
         let session = SessionTable {
             id: id.clone(),

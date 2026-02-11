@@ -1,4 +1,5 @@
 use axum::http::header;
+use chrono::{DateTime, Utc};
 use sha2::{digest::Update, Digest, Sha256};
 use uuid::Uuid;
 
@@ -7,7 +8,7 @@ use crate::{db::Database, error::AuthError};
 pub struct Session {
     pub id: String,
     pub user_id: Uuid,
-    pub expires_at: chrono::DateTime<chrono::Utc>,
+    pub expires_at: i64,
 }
 
 pub fn generate_session_token() -> Result<String, AuthError> {
@@ -27,7 +28,7 @@ pub async fn create_session(
     let hasher = Sha256::new();
     let session_id = hex::encode(hasher.chain(token.as_bytes()).finalize());
 
-    let expires_at = chrono::Utc::now() + chrono::Duration::days(30);
+    let expires_at = (Utc::now() + chrono::Duration::days(30)).timestamp();
 
     let session = Session {
         id: session_id.clone(),
@@ -41,14 +42,13 @@ pub async fn create_session(
 }
 
 /// Build a Set-Cookie header value for a session token.
-pub fn session_cookie(
-    token: &str,
-    expires_at: chrono::DateTime<chrono::Utc>,
-) -> (header::HeaderName, String) {
+pub fn session_cookie(token: &str, expires_at: i64) -> (header::HeaderName, String) {
+    let expires_dt = DateTime::<Utc>::from_timestamp(expires_at, 0)
+        .unwrap_or_else(|| Utc::now() + chrono::Duration::days(30));
     let cookie = format!(
         "session={}; HttpOnly; Path=/; Secure; SameSite=Lax; Expires={}",
         token,
-        expires_at.format("%a, %d %b %Y %H:%M:%S GMT")
+        expires_dt.format("%a, %d %b %Y %H:%M:%S GMT")
     );
     (header::SET_COOKIE, cookie)
 }

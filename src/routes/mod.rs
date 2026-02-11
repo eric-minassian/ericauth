@@ -21,7 +21,10 @@ use axum::{
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    middleware::{csrf::csrf_middleware, security_headers::security_headers_middleware},
+    middleware::{
+        csrf::csrf_middleware, rate_limit::rate_limit_middleware,
+        security_headers::security_headers_middleware,
+    },
     state::AppState,
 };
 
@@ -46,11 +49,18 @@ pub fn router(state: AppState) -> Router {
         .route("/.well-known/jwks.json", get(jwks::handler))
         .layer(cors);
 
-    // All other routes (UI pages, JSON APIs that don't need CORS)
-    let other_routes = Router::new()
-        .route("/health", get(health::handler))
+    // Rate-limited routes (login and signup)
+    let rate_limited_routes = Router::new()
         .route("/signup", get(signup_page::handler).post(signup::handler))
         .route("/login", get(login_page::handler).post(login::handler))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_middleware,
+        ));
+
+    // All other routes (no rate limit, no CORS)
+    let other_routes = Router::new()
+        .route("/health", get(health::handler))
         .route("/logout", post(logout::handler))
         .route(
             "/consent",
@@ -68,6 +78,7 @@ pub fn router(state: AppState) -> Router {
 
     Router::new()
         .merge(cors_routes)
+        .merge(rate_limited_routes)
         .merge(other_routes)
         .layer(middleware::from_fn(csrf_middleware))
         .layer(middleware::from_fn(security_headers_middleware))

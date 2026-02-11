@@ -33,6 +33,7 @@ export class EricAuthStack extends Stack {
       refreshTokensTable: database.refreshTokensTable,
       credentialsTable: database.credentialsTable,
       challengesTable: database.challengesTable,
+      rateLimitsTable: database.rateLimitsTable,
     });
 
     if (props.domainName && props.hostedZoneDomain) {

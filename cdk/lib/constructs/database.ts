@@ -1,3 +1,4 @@
+import { RemovalPolicy } from "aws-cdk-lib";
 import { AttributeType, TableV2 } from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
 
@@ -11,6 +12,7 @@ export class Database extends Construct {
   public readonly refreshTokensTable: TableV2;
   public readonly credentialsTable: TableV2;
   public readonly challengesTable: TableV2;
+  public readonly rateLimitsTable: TableV2;
 
   constructor(scope: Construct, id: string, props: DatabaseProps) {
     super(scope, id);
@@ -55,6 +57,13 @@ export class Database extends Construct {
       tableName: `${prefix}-challenges`,
       partitionKey: { name: "challenge_id", type: AttributeType.STRING },
       timeToLiveAttribute: "expires_at",
+    });
+
+    this.rateLimitsTable = new TableV2(this, "RateLimitsTable", {
+      tableName: `${prefix}-rate-limits`,
+      partitionKey: { name: "key", type: AttributeType.STRING },
+      timeToLiveAttribute: "expires_at",
+      removalPolicy: RemovalPolicy.DESTROY,
     });
   }
 }

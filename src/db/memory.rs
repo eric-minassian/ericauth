@@ -17,6 +17,13 @@ pub struct ChallengeRecord {
     pub expires_at: i64,
 }
 
+/// In-memory rate limit record.
+#[derive(Clone)]
+pub struct RateLimitRecord {
+    pub count: i64,
+    pub expires_at: i64,
+}
+
 /// In-memory database backend for local development and testing.
 /// Uses `Arc<RwLock<...>>` so it can be `Clone`d across axum handlers.
 #[derive(Clone)]
@@ -26,6 +33,7 @@ pub struct MemoryDb {
     refresh_tokens: Arc<RwLock<HashMap<String, RefreshTokenTable>>>,
     credentials: Arc<RwLock<HashMap<String, CredentialTable>>>,
     challenges: Arc<RwLock<HashMap<String, ChallengeRecord>>>,
+    rate_limits: Arc<RwLock<HashMap<String, RateLimitRecord>>>,
 }
 
 impl MemoryDb {
@@ -36,6 +44,7 @@ impl MemoryDb {
             refresh_tokens: Arc::new(RwLock::new(HashMap::new())),
             credentials: Arc::new(RwLock::new(HashMap::new())),
             challenges: Arc::new(RwLock::new(HashMap::new())),
+            rate_limits: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -333,6 +342,47 @@ impl MemoryDb {
         }
 
         Ok(record.challenge_data)
+    }
+
+    // --- Rate limit operations ---
+
+    pub async fn increment_rate_limit(
+        &self,
+        key: &str,
+        window_seconds: i64,
+    ) -> Result<i64, AuthError> {
+        let now = chrono::Utc::now().timestamp();
+        let mut limits = self
+            .rate_limits
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        let existing = limits.get(key).cloned();
+
+        // If the entry exists and hasn't expired, increment it
+        if let Some(record) = existing {
+            if record.expires_at > now {
+                let new_count = record.count + 1;
+                limits.insert(
+                    key.to_string(),
+                    RateLimitRecord {
+                        count: new_count,
+                        expires_at: record.expires_at,
+                    },
+                );
+                return Ok(new_count);
+            }
+        }
+
+        // Otherwise, create a new entry
+        limits.insert(
+            key.to_string(),
+            RateLimitRecord {
+                count: 1,
+                expires_at: now + window_seconds,
+            },
+        );
+        Ok(1)
     }
 }
 

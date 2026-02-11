@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Recovery Codes — EricAuth{% endblock %}
+
+{% block head %}
+<style>
+    .rc-desc {
+        font-size: 0.875rem;
+        color: #a1a1aa;
+        margin-bottom: 1.25rem;
+        line-height: 1.6;
+    }
+    .rc-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+        margin-bottom: 1.25rem;
+    }
+    .rc-code {
+        font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
+        font-size: 0.875rem;
+        background: #09090b;
+        border: 1px solid #27272a;
+        border-radius: 4px;
+        padding: 0.5rem 0.75rem;
+        text-align: center;
+        color: #e4e4e7;
+        letter-spacing: 0.05em;
+        user-select: all;
+    }
+    .rc-warning {
+        font-size: 0.8rem;
+        color: #fbbf24;
+        margin-bottom: 1.5rem;
+        padding: 0.625rem 0.75rem;
+        background: rgba(251,191,36,0.08);
+        border: 1px solid rgba(251,191,36,0.15);
+        border-radius: 6px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Recovery Codes</h1>
+
+<p class="rc-desc">
+    Save these recovery codes in a secure place. If you lose access to your
+    account, you can use one of these codes to sign in. Each code can only be
+    used once.
+</p>
+
+<div class="rc-grid">
+    {% for code in &recovery_codes %}
+    <div class="rc-code">{{ code }}</div>
+    {% endfor %}
+</div>
+
+<div class="rc-warning">
+    These codes will not be shown again. Make sure to save them now.
+</div>
+
+<a href="/passkeys/manage" class="btn btn-primary">Continue</a>
+{% endblock %}

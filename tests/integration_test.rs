@@ -78,7 +78,7 @@ async fn test_signup_creates_session() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(response.status(), StatusCode::OK);
 
     // Should have a session cookie
     let set_cookie = response
@@ -106,9 +106,9 @@ async fn test_signup_duplicate_email_fails() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(response.status(), StatusCode::OK);
 
-    // Second signup with same email should fail
+    // Second signup with same email should redirect with error
     let app = test_router(state);
     let request = Request::builder()
         .method("POST")
@@ -120,7 +120,14 @@ async fn test_signup_duplicate_email_fails() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let location = response
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(location.contains("error="));
 }
 
 #[tokio::test]
@@ -138,7 +145,14 @@ async fn test_signup_weak_password_fails() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let location = response
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(location.contains("error="));
 }
 
 // --- Login flow ---
@@ -159,7 +173,7 @@ async fn test_signup_then_login() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(response.status(), StatusCode::OK);
 
     // Login with same credentials
     let app = test_router(state);
@@ -173,7 +187,14 @@ async fn test_signup_then_login() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let location = response
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert_eq!(location, "/passkeys/manage");
 
     // Should have a session cookie
     let set_cookie = response
@@ -220,7 +241,14 @@ async fn test_login_wrong_password_fails() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let location = response
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(location.contains("error="));
 }
 
 #[tokio::test]
@@ -241,7 +269,14 @@ async fn test_login_nonexistent_user_fails() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let location = response
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(location.contains("error="));
 }
 
 // --- Session validation ---
@@ -265,7 +300,7 @@ async fn test_session_cookie_grants_access_to_protected_route() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(response.status(), StatusCode::OK);
 
     // Extract session cookie
     let set_cookie = response
@@ -339,7 +374,14 @@ async fn test_logout_invalidates_session() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let location = response
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert_eq!(location, "/login");
 
     // Session should now be invalid
     let app = test_router(state);

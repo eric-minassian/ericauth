@@ -1,7 +1,7 @@
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode},
-    response::IntoResponse,
+    http::HeaderMap,
+    response::{IntoResponse, Redirect, Response},
     Form,
 };
 use serde::Deserialize;
@@ -26,15 +26,37 @@ pub async fn handler(
     State(state): State<AppState>,
     headers: HeaderMap,
     Form(body): Form<RecoverPayload>,
-) -> Result<impl IntoResponse, AuthError> {
+) -> Response {
+    match try_recover(state, headers, body).await {
+        Ok(resp) => resp,
+        Err(err) => {
+            let msg = match &err {
+                AuthError::Internal(_) => "An unexpected error occurred",
+                AuthError::BadRequest(m)
+                | AuthError::Unauthorized(m)
+                | AuthError::Conflict(m)
+                | AuthError::NotFound(m)
+                | AuthError::TooManyRequests(m) => m,
+            };
+            let redirect_url = format!("/recover?error={}", urlencoding::encode(msg));
+            Redirect::to(&redirect_url).into_response()
+        }
+    }
+}
+
+async fn try_recover(
+    state: AppState,
+    headers: HeaderMap,
+    body: RecoverPayload,
+) -> Result<Response, AuthError> {
     if body.email.is_empty() || body.recovery_code.is_empty() {
         return Err(AuthError::BadRequest(
-            "missing email or recovery_code".to_string(),
+            "Email and recovery code are required".to_string(),
         ));
     }
 
     if !verify_email(&body.email) {
-        return Err(AuthError::BadRequest("invalid email".to_string()));
+        return Err(AuthError::BadRequest("Invalid email address".to_string()));
     }
 
     // Look up user by email
@@ -42,14 +64,14 @@ pub async fn handler(
         .db
         .get_user_by_email(body.email)
         .await?
-        .ok_or_else(|| AuthError::Unauthorized("invalid email or recovery code".into()))?;
+        .ok_or_else(|| AuthError::Unauthorized("Invalid email or recovery code".into()))?;
 
     // Hash the provided recovery code and check against stored hashes
     let code_hash = hex::encode(Sha256::digest(body.recovery_code.as_bytes()));
 
     if !user.recovery_codes.contains(&code_hash) {
         return Err(AuthError::Unauthorized(
-            "invalid email or recovery code".into(),
+            "Invalid email or recovery code".into(),
         ));
     }
 
@@ -80,5 +102,6 @@ pub async fn handler(
             .map_err(|e| AuthError::Internal(format!("Failed to build cookie header: {e}")))?,
     );
 
-    Ok((StatusCode::NO_CONTENT, response_headers))
+    // Redirect to passkeys management page
+    Ok((response_headers, Redirect::to("/passkeys/manage")).into_response())
 }

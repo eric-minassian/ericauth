@@ -50,7 +50,10 @@
 <div id="passkey-error" class="error-msg" style="display:none;"></div>
 
 <div class="link-row">
-    Don't have an account? <a href="/signup">Sign up</a>
+    Don't have an account? <a href="/signup{% if !oauth_query.is_empty() %}?{{ oauth_query }}{% endif %}">Sign up</a>
+</div>
+<div class="link-row">
+    <a href="/recover">Forgot your password?</a>
 </div>
 
 <script>
@@ -124,7 +127,7 @@
             });
             if (!completeRes.ok) throw new Error('Passkey authentication failed');
 
-            window.location.href = '/';
+            window.location.href = '/passkeys/manage';
         } catch (e) {
             errEl.textContent = e.message || 'Passkey authentication failed';
             errEl.style.display = 'block';

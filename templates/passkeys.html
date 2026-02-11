@@ -2,11 +2,42 @@
 
 {% block title %}Manage Passkeys — EricAuth{% endblock %}
 
+{% block head %}
+<style>
+    .passkey-empty {
+        color: #71717a;
+        margin-bottom: 1rem;
+        font-size: 0.875rem;
+        line-height: 1.6;
+    }
+    .passkey-list { list-style: none; margin-bottom: 1.5rem; }
+    .passkey-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #27272a;
+    }
+    .passkey-info { display: flex; flex-direction: column; }
+    .passkey-date { font-size: 0.75rem; color: #52525b; }
+    .passkey-delete { margin: 0; }
+    .btn-small {
+        padding: 0.25rem 0.75rem;
+        font-size: 0.8rem;
+        width: auto;
+    }
+    .logout-form { margin-top: 0.5rem; }
+</style>
+{% endblock %}
+
 {% block content %}
 <h1>Passkeys</h1>
 
 {% if passkeys.is_empty() %}
-<p class="passkey-empty">No passkeys registered yet.</p>
+<p class="passkey-empty">
+    You haven't registered any passkeys yet. Passkeys let you sign in
+    securely without a password using your device's biometrics or security key.
+</p>
 {% else %}
 <ul class="passkey-list">
     {% for pk in &passkeys %}
@@ -29,6 +60,10 @@
 
 <div id="passkey-error" class="error-msg" style="display:none;"></div>
 <div id="passkey-success" class="success-msg" style="display:none;"></div>
+
+<form method="POST" action="/logout" class="logout-form">
+    <button type="submit" class="btn btn-secondary">Log Out</button>
+</form>
 
 <script>
 (function() {
@@ -107,26 +142,4 @@
     });
 })();
 </script>
-{% endblock %}
-
-{% block head %}
-<style>
-    .passkey-empty { color: #666; margin-bottom: 1rem; }
-    .passkey-list { list-style: none; margin-bottom: 1.5rem; }
-    .passkey-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0.75rem 0;
-        border-bottom: 1px solid #e5e7eb;
-    }
-    .passkey-info { display: flex; flex-direction: column; }
-    .passkey-date { font-size: 0.75rem; color: #999; }
-    .passkey-delete { margin: 0; }
-    .btn-small {
-        padding: 0.25rem 0.75rem;
-        font-size: 0.8rem;
-        width: auto;
-    }
-</style>
 {% endblock %}

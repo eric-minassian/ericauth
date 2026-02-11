@@ -2,21 +2,46 @@
 
 {% block title %}Authorize — EricAuth{% endblock %}
 
+{% block head %}
+<style>
+    .consent-info { margin-bottom: 0.75rem; }
+    .consent-signed-in {
+        font-size: 0.875rem;
+        color: #71717a;
+        margin-bottom: 1rem;
+    }
+    .scope-list { margin-bottom: 1.5rem; }
+    .scope-list p { font-size: 0.875rem; margin-bottom: 0.5rem; color: #a1a1aa; }
+    .scope-list ul { margin-left: 1.25rem; font-size: 0.875rem; }
+    .scope-list li { margin-bottom: 0.25rem; color: #d4d4d8; }
+</style>
+{% endblock %}
+
 {% block content %}
 <h1>Authorize Application</h1>
 
 <p class="consent-info">
-    <strong>{{ client_id }}</strong> is requesting access to your account.
+    <strong>{{ client_id }}</strong> wants to access your account.
 </p>
 
 <p class="consent-signed-in">Signed in as <strong>{{ email }}</strong></p>
 
 {% if !scopes.is_empty() %}
 <div class="scope-list">
-    <p>This application is requesting the following permissions:</p>
+    <p>This application is requesting permission to:</p>
     <ul>
         {% for scope in &scopes %}
-        <li>{{ scope }}</li>
+        <li>
+            {% if scope == "openid" %}
+            Verify your identity
+            {% else if scope == "profile" %}
+            View your profile information
+            {% else if scope == "email" %}
+            View your email address
+            {% else %}
+            Access: {{ scope }}
+            {% endif %}
+        </li>
         {% endfor %}
     </ul>
 </div>
@@ -64,19 +89,4 @@
     <input type="hidden" name="action" value="deny">
     <button type="submit" class="btn btn-danger">Deny</button>
 </form>
-{% endblock %}
-
-{% block head %}
-<style>
-    .consent-info { margin-bottom: 0.75rem; }
-    .consent-signed-in {
-        font-size: 0.875rem;
-        color: #666;
-        margin-bottom: 1rem;
-    }
-    .scope-list { margin-bottom: 1.5rem; }
-    .scope-list p { font-size: 0.875rem; margin-bottom: 0.5rem; }
-    .scope-list ul { margin-left: 1.25rem; font-size: 0.875rem; }
-    .scope-list li { margin-bottom: 0.25rem; }
-</style>
 {% endblock %}

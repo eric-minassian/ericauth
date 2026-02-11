@@ -1,4 +1,7 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse};
+use axum::{
+    extract::State,
+    response::{IntoResponse, Redirect},
+};
 
 use crate::{error::AuthError, middleware::auth::AuthenticatedUser, state::AppState};
 
@@ -19,5 +22,5 @@ pub async fn handler(
             .map_err(|e| AuthError::Internal(format!("Failed to build cookie header: {e}")))?,
     );
 
-    Ok((StatusCode::NO_CONTENT, headers))
+    Ok((headers, Redirect::to("/login")))
 }

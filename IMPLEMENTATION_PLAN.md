@@ -441,7 +441,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ## Phase 3: WebAuthn Passkeys
 
-### 3.1 — Add WebAuthn dependencies and configuration
+### 3.1 — ~~Add WebAuthn dependencies and configuration~~ DONE
 
 **Files:** `Cargo.toml`, new `src/webauthn_config.rs`, `src/state.rs`
 

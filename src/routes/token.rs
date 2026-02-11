@@ -186,6 +186,7 @@ mod tests {
         AppState {
             db: Database::memory(),
             jwt_keys: Some(jwt_keys),
+            webauthn: std::sync::Arc::new(crate::webauthn_config::build_webauthn().unwrap()),
         }
     }
 
@@ -396,6 +397,7 @@ mod tests {
         let state = AppState {
             db: Database::memory(),
             jwt_keys: None,
+            webauthn: std::sync::Arc::new(crate::webauthn_config::build_webauthn().unwrap()),
         };
         let user_id = setup_user(&state).await;
         let raw_token = setup_refresh_token(&state, &user_id, "openid").await;

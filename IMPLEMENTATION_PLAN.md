@@ -361,7 +361,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 2.4 — Add scopes to user model
+### 2.4 — ~~Add scopes to user model~~ DONE
 
 **Files:** `src/user.rs`, `src/db/user.rs`
 

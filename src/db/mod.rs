@@ -60,16 +60,28 @@ impl Database {
         password_hash: String,
         created_at: String,
         updated_at: String,
+        scopes: Vec<String>,
     ) -> Result<Uuid, AuthError> {
         match self {
             Database::Dynamo(db) => {
-                db.insert_user(email, password_hash, created_at, updated_at)
+                db.insert_user(email, password_hash, created_at, updated_at, scopes)
                     .await
             }
             Database::Memory(db) => {
-                db.insert_user(email, password_hash, created_at, updated_at)
+                db.insert_user(email, password_hash, created_at, updated_at, scopes)
                     .await
             }
+        }
+    }
+
+    pub async fn update_user_scopes(
+        &self,
+        user_id: &str,
+        scopes: Vec<String>,
+    ) -> Result<(), AuthError> {
+        match self {
+            Database::Dynamo(db) => db.update_user_scopes(user_id, scopes).await,
+            Database::Memory(db) => db.update_user_scopes(user_id, scopes).await,
         }
     }
 

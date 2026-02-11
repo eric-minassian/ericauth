@@ -24,7 +24,8 @@ pub async fn create_user(
     email: String,
     password: String,
 ) -> Result<User, AuthError> {
-    let password_hash = hash_password(&password).map_err(|e| AuthError::Internal(e.to_string()))?;
+    let password_hash =
+        Some(hash_password(&password).map_err(|e| AuthError::Internal(e.to_string()))?);
 
     // Generate 8 recovery codes
     let mut plaintext_codes = Vec::with_capacity(8);

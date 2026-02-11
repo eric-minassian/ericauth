@@ -35,17 +35,12 @@ pub async fn handler(
     headers: HeaderMap,
     Form(body): Form<LoginPayload>,
 ) -> Result<impl IntoResponse, AuthError> {
-    // Check client IP
+    // Extract client IP
     let client_ip = headers
         .get("X-Forwarded-For")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-
-    if client_ip.is_empty() {
-        return Err(AuthError::BadRequest(
-            "missing X-Forwarded-For header".to_string(),
-        ));
-    }
+        .unwrap_or("unknown")
+        .to_string();
 
     // Validate input
     if body.email.is_empty() || body.password.is_empty() {
@@ -74,7 +69,16 @@ pub async fn handler(
     };
 
     // Verify password
-    let valid = verify_password_hash(&body.password, &user.password_hash)
+    let password_hash = match &user.password_hash {
+        Some(hash) => hash,
+        None => {
+            return Err(AuthError::Unauthorized(
+                "password login not available for this account".to_string(),
+            ));
+        }
+    };
+
+    let valid = verify_password_hash(&body.password, password_hash)
         .map_err(|e| AuthError::Internal(e.to_string()))?;
 
     if !valid {

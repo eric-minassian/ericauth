@@ -10,6 +10,9 @@ pub struct CredentialTable {
     pub credential_id: String,
     pub user_id: String,
     pub passkey_json: String,
+    pub created_at: String,
+    #[serde(default)]
+    pub last_used_at: Option<String>,
 }
 
 impl DynamoDb {
@@ -18,6 +21,7 @@ impl DynamoDb {
         credential_id: &str,
         user_id: &str,
         passkey_json: &str,
+        created_at: &str,
     ) -> Result<(), AuthError> {
         self.client
             .put_item()
@@ -28,6 +32,7 @@ impl DynamoDb {
             )
             .item("user_id", AttributeValue::S(user_id.to_string()))
             .item("passkey_json", AttributeValue::S(passkey_json.to_string()))
+            .item("created_at", AttributeValue::S(created_at.to_string()))
             .condition_expression("attribute_not_exists(credential_id)")
             .send()
             .await

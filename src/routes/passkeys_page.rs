@@ -40,7 +40,7 @@ pub async fn handler(
             PasskeyEntry {
                 credential_id: cred.credential_id,
                 name,
-                created_at: "Unknown".to_string(),
+                created_at: cred.created_at,
             }
         })
         .collect();

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Account Recovery — EricAuth{% endblock %}
+
+{% block content %}
+<h1>Account Recovery</h1>
+
+{% if let Some(err) = error %}
+<div class="error-msg">{{ err }}</div>
+{% endif %}
+
+<form method="POST" action="/recover">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" required autocomplete="email">
+
+    <label for="recovery_code">Recovery Code</label>
+    <input type="text" id="recovery_code" name="recovery_code" required autocomplete="off"
+           placeholder="e.g. ABCD1234">
+
+    <button type="submit" class="btn btn-primary">Recover Account</button>
+</form>
+
+<div class="link-row">
+    Remember your password? <a href="/login">Log in</a>
+</div>
+{% endblock %}

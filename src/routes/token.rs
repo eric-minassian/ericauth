@@ -161,6 +161,7 @@ async fn handle_authorization_code(
     let new_refresh_entry = RefreshTokenTable {
         token_hash: new_token_hash,
         user_id: auth_code.user_id.clone(),
+        client_id: client_id.clone(),
         scope: scope.clone(),
         expires_at: new_expires_at,
         revoked: false,
@@ -230,6 +231,13 @@ async fn handle_refresh_token(
         .map_err(|e| token_error("server_error", &format!("failed to look up token: {e}")))?
         .ok_or_else(|| token_error("invalid_grant", "refresh token is invalid or expired"))?;
 
+    // Validate client_id matches if provided
+    if let Some(ref req_client_id) = body.client_id {
+        if *req_client_id != stored_token.client_id {
+            return Err(token_error("invalid_grant", "client_id mismatch"));
+        }
+    }
+
     // Revoke the old refresh token (rotation)
     state
         .db
@@ -252,13 +260,28 @@ async fn handle_refresh_token(
         .ok_or_else(|| token_error("invalid_grant", "user not found"))?;
 
     let now = chrono::Utc::now().timestamp() as usize;
-    let scope = body.scope.unwrap_or(stored_token.scope.clone());
+    let scope = match body.scope {
+        Some(ref requested) => {
+            let stored_scopes: std::collections::HashSet<&str> =
+                stored_token.scope.split_whitespace().collect();
+            for s in requested.split_whitespace() {
+                if !stored_scopes.contains(s) {
+                    return Err(token_error(
+                        "invalid_scope",
+                        &format!("scope '{}' was not in the original grant", s),
+                    ));
+                }
+            }
+            requested.clone()
+        }
+        None => stored_token.scope.clone(),
+    };
 
     // Sign new access token
     let access_claims = AccessTokenClaims {
         iss: ISSUER.to_string(),
         sub: stored_token.user_id.clone(),
-        aud: body.client_id.unwrap_or_default(),
+        aud: stored_token.client_id.clone(),
         exp: now + ACCESS_TOKEN_EXPIRY_SECS as usize,
         iat: now,
         scope: scope.clone(),
@@ -282,6 +305,7 @@ async fn handle_refresh_token(
     let new_refresh_entry = RefreshTokenTable {
         token_hash: new_token_hash,
         user_id: stored_token.user_id,
+        client_id: stored_token.client_id.clone(),
         scope: scope.clone(),
         expires_at: new_expires_at,
         revoked: false,
@@ -353,6 +377,7 @@ mod tests {
         let entry = RefreshTokenTable {
             token_hash,
             user_id: user_id.to_string(),
+            client_id: "test-client".to_string(),
             scope: scope.to_string(),
             expires_at,
             revoked: false,
@@ -368,7 +393,7 @@ mod tests {
             .db
             .insert_user(
                 "test@example.com".to_string(),
-                "hashed_pw".to_string(),
+                Some("hashed_pw".to_string()),
                 now.clone(),
                 now,
                 vec!["openid".to_string(), "email".to_string()],

@@ -9,6 +9,7 @@ mod openid_config;
 mod passkey;
 mod passkeys_page;
 mod recover;
+mod recover_page;
 mod signup;
 mod signup_page;
 mod token;
@@ -45,18 +46,26 @@ pub fn router(state: AppState) -> Router {
         ])
         .allow_credentials(true);
 
-    // API routes that need CORS (token endpoints, well-known endpoints)
+    // API routes that need CORS (token endpoints, well-known endpoints, userinfo)
     let cors_routes = Router::new()
         .route("/token", post(token::handler))
         .route("/token/revoke", post(token_revoke::handler))
         .route("/.well-known/jwks.json", get(jwks::handler))
+        .route(
+            "/.well-known/openid-configuration",
+            get(openid_config::handler),
+        )
+        .route("/userinfo", get(userinfo::handler).post(userinfo::handler))
         .layer(cors);
 
     // Rate-limited routes (auth entry points that accept untrusted input)
     let rate_limited_routes = Router::new()
         .route("/signup", get(signup_page::handler).post(signup::handler))
         .route("/login", get(login_page::handler).post(login::handler))
-        .route("/recover", post(recover::handler))
+        .route(
+            "/recover",
+            get(recover_page::handler).post(recover::handler),
+        )
         .route("/passkeys/auth/begin", post(passkey::auth_begin))
         .layer(middleware::from_fn_with_state(
             state.clone(),
@@ -78,12 +87,8 @@ pub fn router(state: AppState) -> Router {
             post(passkey::register_complete),
         )
         .route("/passkeys/auth/complete", post(passkey::auth_complete))
-        .route("/authorize", get(authorize::handler))
-        .route(
-            "/.well-known/openid-configuration",
-            get(openid_config::handler),
-        )
-        .route("/userinfo", get(userinfo::handler).post(userinfo::handler));
+        .route("/passkeys/delete", post(passkey::delete))
+        .route("/authorize", get(authorize::handler));
 
     Router::new()
         .merge(cors_routes)

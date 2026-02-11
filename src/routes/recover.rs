@@ -2,7 +2,7 @@ use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    Json,
+    Form,
 };
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -18,12 +18,14 @@ use crate::{
 pub struct RecoverPayload {
     email: String,
     recovery_code: String,
+    #[allow(dead_code)]
+    csrf_token: Option<String>,
 }
 
 pub async fn handler(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(body): Json<RecoverPayload>,
+    Form(body): Form<RecoverPayload>,
 ) -> Result<impl IntoResponse, AuthError> {
     if body.email.is_empty() || body.recovery_code.is_empty() {
         return Err(AuthError::BadRequest(

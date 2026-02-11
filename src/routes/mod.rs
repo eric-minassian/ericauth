@@ -2,6 +2,7 @@ mod health;
 mod jwks;
 mod login;
 mod logout;
+mod passkey;
 mod signup;
 mod token;
 mod token_revoke;
@@ -22,5 +23,10 @@ pub fn router(state: AppState) -> Router {
         .route("/token", post(token::handler))
         .route("/token/revoke", post(token_revoke::handler))
         .route("/.well-known/jwks.json", get(jwks::handler))
+        .route("/passkeys/register/begin", post(passkey::register_begin))
+        .route(
+            "/passkeys/register/complete",
+            post(passkey::register_complete),
+        )
         .with_state(state)
 }

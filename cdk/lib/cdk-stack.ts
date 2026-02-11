@@ -4,7 +4,7 @@ import {
   CertificateValidation,
 } from "aws-cdk-lib/aws-certificatemanager";
 import { ARecord, HostedZone, RecordTarget } from "aws-cdk-lib/aws-route53";
-import { ApiGateway } from "aws-cdk-lib/aws-route53-targets";
+import { ApiGatewayv2DomainProperties } from "aws-cdk-lib/aws-route53-targets";
 import { Construct } from "constructs";
 import { Api } from "./constructs/api";
 import { Database } from "./constructs/database";
@@ -55,7 +55,12 @@ export class EricAuthStack extends Stack {
       new ARecord(this, "ARecord", {
         zone: hostedZone,
         recordName: props.domainName,
-        target: RecordTarget.fromAlias(new ApiGateway(api.api)),
+        target: RecordTarget.fromAlias(
+          new ApiGatewayv2DomainProperties(
+            api.customDomainName!.regionalDomainName,
+            api.customDomainName!.regionalHostedZoneId,
+          ),
+        ),
       });
     } else {
       // No custom domain — use API Gateway default URL

@@ -1,8 +1,5 @@
-import {
-  DomainNameOptions,
-  LambdaIntegration,
-  RestApi,
-} from "aws-cdk-lib/aws-apigateway";
+import { DomainName, HttpApi } from "aws-cdk-lib/aws-apigatewayv2";
+import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { ICertificate } from "aws-cdk-lib/aws-certificatemanager";
 import { RustFunction } from "cargo-lambda-cdk";
 import { Construct } from "constructs";
@@ -16,33 +13,27 @@ interface ApiProps {
 }
 
 export class Api extends Construct {
-  public readonly api: RestApi;
+  public readonly api: HttpApi;
+  public readonly customDomainName?: DomainName;
 
   constructor(scope: Construct, id: string, props: ApiProps) {
     super(scope, id);
 
-    let domainName: DomainNameOptions | undefined;
+    const integration = new HttpLambdaIntegration("Integration", props.handler);
+
+    let defaultDomainMapping;
     if (props.domainName && props.certificate) {
-      domainName = {
+      this.customDomainName = new DomainName(this, "DomainName", {
         domainName: props.domainName,
         certificate: props.certificate,
-      };
+      });
+      defaultDomainMapping = { domainName: this.customDomainName };
     }
 
-    this.api = new RestApi(this, "Api", {
-      restApiName: "eric-auth",
-      ...(domainName && { domainName }),
-    });
-
-    const integration = new LambdaIntegration(props.handler);
-
-    // Root path "/" — {proxy+} does NOT match the bare root
-    this.api.root.addMethod("ANY", integration);
-
-    // All sub-paths "/{proxy+}" — catches /health, /login, /.well-known/jwks.json, etc.
-    this.api.root.addProxy({
+    this.api = new HttpApi(this, "Api", {
+      apiName: "eric-auth",
       defaultIntegration: integration,
-      anyMethod: true,
+      ...(defaultDomainMapping && { defaultDomainMapping }),
     });
   }
 }

@@ -638,7 +638,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 4.4 — Implement error page template
+### 4.4 — ~~Implement error page template~~ DONE
 
 **Files:** new `templates/error.html`, `src/templates.rs`
 

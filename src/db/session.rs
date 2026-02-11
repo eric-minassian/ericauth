@@ -1,6 +1,7 @@
+use aws_sdk_dynamodb::types::AttributeValue;
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
-use serde_dynamo::aws_sdk_dynamodb_1::to_item;
+use serde_dynamo::aws_sdk_dynamodb_1::{from_item, to_item};
 use uuid::Uuid;
 
 use crate::error::AuthError;
@@ -39,5 +40,38 @@ impl DynamoDb {
             .map_err(|e| AuthError::Internal(format!("Failed to insert session: {e}")))?;
 
         Ok(())
+    }
+
+    pub async fn delete_session(&self, id: &str) -> Result<(), AuthError> {
+        self.client
+            .delete_item()
+            .table_name(&self.sessions_table)
+            .key("id", AttributeValue::S(id.to_string()))
+            .send()
+            .await
+            .map_err(|e| AuthError::Internal(format!("Failed to delete session: {e}")))?;
+
+        Ok(())
+    }
+
+    pub async fn get_session_by_id(&self, id: &str) -> Result<Option<SessionTable>, AuthError> {
+        let response = self
+            .client
+            .get_item()
+            .table_name(&self.sessions_table)
+            .key("id", AttributeValue::S(id.to_string()))
+            .send()
+            .await
+            .map_err(|e| AuthError::Internal(format!("DynamoDB get session failed: {e}")))?;
+
+        match response.item {
+            Some(item) => {
+                let session = from_item::<SessionTable>(item).map_err(|e| {
+                    AuthError::Internal(format!("Failed to deserialize session: {e}"))
+                })?;
+                Ok(Some(session))
+            }
+            None => Ok(None),
+        }
     }
 }

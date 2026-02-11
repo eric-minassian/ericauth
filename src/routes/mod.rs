@@ -1,5 +1,6 @@
 mod health;
 mod login;
+mod logout;
 mod signup;
 
 use axum::{
@@ -14,5 +15,6 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(health::handler))
         .route("/signup", post(signup::handler))
         .route("/login", post(login::handler))
+        .route("/logout", post(logout::handler))
         .with_state(state)
 }

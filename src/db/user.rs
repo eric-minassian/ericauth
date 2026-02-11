@@ -14,6 +14,8 @@ pub struct UserTable {
     pub password_hash: String,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default)]
+    pub scopes: Vec<String>,
 }
 
 impl DynamoDb {
@@ -44,6 +46,7 @@ impl DynamoDb {
         password_hash: String,
         created_at: String,
         updated_at: String,
+        scopes: Vec<String>,
     ) -> Result<Uuid, AuthError> {
         if self.get_user_by_email(email.clone()).await?.is_some() {
             return Err(AuthError::Conflict("email already in use".to_string()));
@@ -55,6 +58,7 @@ impl DynamoDb {
             password_hash,
             created_at,
             updated_at,
+            scopes,
         };
 
         let item = to_item(&user)
@@ -69,5 +73,26 @@ impl DynamoDb {
             .map_err(|e| AuthError::Internal(format!("Failed to insert user: {e}")))?;
 
         Ok(user.id)
+    }
+
+    pub async fn update_user_scopes(
+        &self,
+        user_id: &str,
+        scopes: Vec<String>,
+    ) -> Result<(), AuthError> {
+        let scopes_av = serde_dynamo::aws_sdk_dynamodb_1::to_attribute_value(&scopes)
+            .map_err(|e| AuthError::Internal(format!("Failed to serialize scopes: {e}")))?;
+
+        self.client
+            .update_item()
+            .table_name(&self.users_table)
+            .key("id", AttributeValue::S(user_id.to_string()))
+            .update_expression("SET scopes = :scopes")
+            .expression_attribute_values(":scopes", scopes_av)
+            .send()
+            .await
+            .map_err(|e| AuthError::Internal(format!("Failed to update user scopes: {e}")))?;
+
+        Ok(())
     }
 }

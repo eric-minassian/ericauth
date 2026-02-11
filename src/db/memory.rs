@@ -38,6 +38,7 @@ impl MemoryDb {
         password_hash: String,
         created_at: String,
         updated_at: String,
+        scopes: Vec<String>,
     ) -> Result<Uuid, AuthError> {
         // Check uniqueness
         if self.get_user_by_email(email.clone()).await?.is_some() {
@@ -51,6 +52,7 @@ impl MemoryDb {
             password_hash,
             created_at,
             updated_at,
+            scopes,
         };
 
         let mut users = self
@@ -60,6 +62,27 @@ impl MemoryDb {
         users.insert(id, user);
 
         Ok(id)
+    }
+
+    pub async fn update_user_scopes(
+        &self,
+        user_id: &str,
+        scopes: Vec<String>,
+    ) -> Result<(), AuthError> {
+        let user_uuid = Uuid::parse_str(user_id)
+            .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
+
+        let mut users = self
+            .users
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        let user = users
+            .get_mut(&user_uuid)
+            .ok_or_else(|| AuthError::NotFound("user not found".to_string()))?;
+
+        user.scopes = scopes;
+        Ok(())
     }
 
     pub async fn insert_session(

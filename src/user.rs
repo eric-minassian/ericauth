@@ -8,6 +8,7 @@ pub struct User {
     pub email: String,
     pub created_at: String,
     pub updated_at: String,
+    pub scopes: Vec<String>,
 }
 
 pub fn verify_username_input(username: &str) -> bool {
@@ -22,8 +23,15 @@ pub async fn create_user(
     let password_hash = hash_password(&password).map_err(|e| AuthError::Internal(e.to_string()))?;
 
     let now = Utc::now().to_rfc3339();
+    let scopes = vec![];
     let user_id = db
-        .insert_user(email.clone(), password_hash, now.clone(), now.clone())
+        .insert_user(
+            email.clone(),
+            password_hash,
+            now.clone(),
+            now.clone(),
+            scopes.clone(),
+        )
         .await?;
 
     Ok(User {
@@ -31,6 +39,7 @@ pub async fn create_user(
         email,
         created_at: now.clone(),
         updated_at: now,
+        scopes,
     })
 }
 

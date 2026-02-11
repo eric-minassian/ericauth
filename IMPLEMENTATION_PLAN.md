@@ -467,7 +467,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 3.2 — Add Credentials and Challenges DynamoDB tables
+### 3.2 — ~~Add Credentials and Challenges DynamoDB tables~~ DONE
 
 **Files:** `cdk/lib/constructs/database.ts`, `cdk/lib/constructs/lambda.ts`, `src/db/mod.rs`, `src/state.rs`
 

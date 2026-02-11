@@ -9,6 +9,8 @@ export class Database extends Construct {
   public readonly usersTable: TableV2;
   public readonly sessionsTable: TableV2;
   public readonly refreshTokensTable: TableV2;
+  public readonly credentialsTable: TableV2;
+  public readonly challengesTable: TableV2;
 
   constructor(scope: Construct, id: string, props: DatabaseProps) {
     super(scope, id);
@@ -35,6 +37,23 @@ export class Database extends Construct {
     this.refreshTokensTable = new TableV2(this, "RefreshTokensTable", {
       tableName: `${prefix}-refresh-tokens`,
       partitionKey: { name: "token_hash", type: AttributeType.STRING },
+      timeToLiveAttribute: "expires_at",
+    });
+
+    this.credentialsTable = new TableV2(this, "CredentialsTable", {
+      tableName: `${prefix}-credentials`,
+      partitionKey: { name: "credential_id", type: AttributeType.STRING },
+      globalSecondaryIndexes: [
+        {
+          indexName: "userIdIndex",
+          partitionKey: { name: "user_id", type: AttributeType.STRING },
+        },
+      ],
+    });
+
+    this.challengesTable = new TableV2(this, "ChallengesTable", {
+      tableName: `${prefix}-challenges`,
+      partitionKey: { name: "challenge_id", type: AttributeType.STRING },
       timeToLiveAttribute: "expires_at",
     });
   }

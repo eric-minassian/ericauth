@@ -28,6 +28,9 @@ pub struct DynamoDb {
     pub users_email_index: String,
     pub sessions_table: String,
     pub refresh_tokens_table: String,
+    pub credentials_table: String,
+    pub credentials_user_id_index: String,
+    pub challenges_table: String,
 }
 
 impl Database {
@@ -44,6 +47,12 @@ impl Database {
                 .unwrap_or_else(|_| "SessionsTable".to_string()),
             refresh_tokens_table: env::var("REFRESH_TOKENS_TABLE_NAME")
                 .unwrap_or_else(|_| "RefreshTokensTable".to_string()),
+            credentials_table: env::var("CREDENTIALS_TABLE_NAME")
+                .unwrap_or_else(|_| "CredentialsTable".to_string()),
+            credentials_user_id_index: env::var("CREDENTIALS_USER_ID_INDEX_NAME")
+                .unwrap_or_else(|_| "userIdIndex".to_string()),
+            challenges_table: env::var("CHALLENGES_TABLE_NAME")
+                .unwrap_or_else(|_| "ChallengesTable".to_string()),
         })
     }
 

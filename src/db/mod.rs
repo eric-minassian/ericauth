@@ -4,7 +4,6 @@ pub mod user;
 
 use std::env;
 
-use chrono::DateTime;
 use uuid::Uuid;
 
 use crate::error::AuthError;
@@ -78,7 +77,7 @@ impl Database {
         &self,
         id: String,
         user_id: Uuid,
-        expires_at: DateTime<chrono::Utc>,
+        expires_at: i64,
     ) -> Result<(), AuthError> {
         match self {
             Database::Dynamo(db) => db.insert_session(id, user_id, expires_at).await,
@@ -108,7 +107,7 @@ impl Database {
 
         let session = session.ok_or_else(|| AuthError::Unauthorized("invalid session".into()))?;
 
-        if session.expires_at <= chrono::Utc::now() {
+        if session.expires_at <= chrono::Utc::now().timestamp() {
             return Err(AuthError::Unauthorized("session expired".into()));
         }
 

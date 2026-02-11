@@ -1,7 +1,5 @@
 use aws_sdk_dynamodb::types::AttributeValue;
-use chrono::DateTime;
 use serde::{Deserialize, Serialize};
-use serde_dynamo::aws_sdk_dynamodb_1::{from_item, to_item};
 use uuid::Uuid;
 
 use crate::error::AuthError;
@@ -12,7 +10,7 @@ use super::DynamoDb;
 pub struct SessionTable {
     pub id: String,
     pub user_id: Uuid,
-    pub expires_at: DateTime<chrono::Utc>,
+    pub expires_at: i64,
 }
 
 impl DynamoDb {
@@ -20,7 +18,7 @@ impl DynamoDb {
         &self,
         id: String,
         user_id: Uuid,
-        expires_at: DateTime<chrono::Utc>,
+        expires_at: i64,
     ) -> Result<(), AuthError> {
         let session = SessionTable {
             id,
@@ -28,7 +26,7 @@ impl DynamoDb {
             expires_at,
         };
 
-        let item = to_item(&session)
+        let item = serde_dynamo::aws_sdk_dynamodb_1::to_item(&session)
             .map_err(|e| AuthError::Internal(format!("Failed to serialize session: {e}")))?;
 
         self.client
@@ -66,9 +64,10 @@ impl DynamoDb {
 
         match response.item {
             Some(item) => {
-                let session = from_item::<SessionTable>(item).map_err(|e| {
-                    AuthError::Internal(format!("Failed to deserialize session: {e}"))
-                })?;
+                let session = serde_dynamo::aws_sdk_dynamodb_1::from_item::<SessionTable>(item)
+                    .map_err(|e| {
+                        AuthError::Internal(format!("Failed to deserialize session: {e}"))
+                    })?;
                 Ok(Some(session))
             }
             None => Ok(None),

@@ -16,6 +16,8 @@ pub struct UserTable {
     pub updated_at: String,
     #[serde(default)]
     pub scopes: Vec<String>,
+    #[serde(default)]
+    pub recovery_codes: Vec<String>,
 }
 
 impl DynamoDb {
@@ -47,6 +49,7 @@ impl DynamoDb {
         created_at: String,
         updated_at: String,
         scopes: Vec<String>,
+        recovery_codes: Vec<String>,
     ) -> Result<Uuid, AuthError> {
         if self.get_user_by_email(email.clone()).await?.is_some() {
             return Err(AuthError::Conflict("email already in use".to_string()));
@@ -59,6 +62,7 @@ impl DynamoDb {
             created_at,
             updated_at,
             scopes,
+            recovery_codes,
         };
 
         let item = to_item(&user)

@@ -558,7 +558,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 3.6 — Add recovery codes to signup flow
+### 3.6 — ~~Add recovery codes to signup flow~~ DONE
 
 **Files:** `src/routes/signup.rs`, `src/user.rs`, `src/db/user.rs`
 

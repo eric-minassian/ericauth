@@ -57,14 +57,20 @@ pub async fn handler(
         return Err(AuthError::BadRequest("invalid email".to_string()));
     }
 
-    // Look up user
-    let user = state
-        .db
-        .get_user_by_email(body.email)
-        .await?
-        .ok_or(AuthError::Unauthorized(
-            "invalid email or password".to_string(),
-        ))?;
+    // Look up user — perform dummy hash on miss to prevent timing enumeration
+    let user = match state.db.get_user_by_email(body.email).await? {
+        Some(user) => user,
+        None => {
+            // Dummy Argon2id verification to equalize timing with the found-user path
+            let _ = verify_password_hash(
+                &body.password,
+                "$argon2id$v=19$m=19456,t=2,p=1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            );
+            return Err(AuthError::Unauthorized(
+                "invalid email or password".to_string(),
+            ));
+        }
+    };
 
     // Verify password
     let valid = verify_password_hash(&body.password, &user.password_hash)

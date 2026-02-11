@@ -22,6 +22,8 @@ pub async fn rate_limit_middleware(
         .headers()
         .get("X-Forwarded-For")
         .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .map(|ip| ip.trim())
         .unwrap_or("unknown")
         .to_string();
 
@@ -122,5 +124,38 @@ mod tests {
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
         assert!(response.headers().get("Retry-After").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_rate_limit_parses_first_ip_from_forwarded_for() {
+        let state = test_state();
+
+        // Pre-fill the rate limit counter for the first IP
+        for _ in 0..10 {
+            state
+                .db
+                .increment_rate_limit("9.9.9.9#/login", 60)
+                .await
+                .unwrap();
+        }
+
+        let app = Router::new()
+            .route("/login", post(ok_handler))
+            .layer(middleware::from_fn_with_state(
+                state.clone(),
+                rate_limit_middleware,
+            ))
+            .with_state(state);
+
+        // Send multi-IP header — only the first IP should be used for rate limiting
+        let request = Request::builder()
+            .method("POST")
+            .uri("/login")
+            .header("X-Forwarded-For", "9.9.9.9, 2.2.2.2, 3.3.3.3")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 }

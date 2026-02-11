@@ -52,10 +52,12 @@ pub fn router(state: AppState) -> Router {
         .route("/.well-known/jwks.json", get(jwks::handler))
         .layer(cors);
 
-    // Rate-limited routes (login and signup)
+    // Rate-limited routes (auth entry points that accept untrusted input)
     let rate_limited_routes = Router::new()
         .route("/signup", get(signup_page::handler).post(signup::handler))
         .route("/login", get(login_page::handler).post(login::handler))
+        .route("/recover", post(recover::handler))
+        .route("/passkeys/auth/begin", post(passkey::auth_begin))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             rate_limit_middleware,
@@ -75,15 +77,13 @@ pub fn router(state: AppState) -> Router {
             "/passkeys/register/complete",
             post(passkey::register_complete),
         )
-        .route("/passkeys/auth/begin", post(passkey::auth_begin))
         .route("/passkeys/auth/complete", post(passkey::auth_complete))
         .route("/authorize", get(authorize::handler))
         .route(
             "/.well-known/openid-configuration",
             get(openid_config::handler),
         )
-        .route("/userinfo", get(userinfo::handler).post(userinfo::handler))
-        .route("/recover", post(recover::handler));
+        .route("/userinfo", get(userinfo::handler).post(userinfo::handler));
 
     Router::new()
         .merge(cors_routes)

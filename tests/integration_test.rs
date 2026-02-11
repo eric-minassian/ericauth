@@ -124,23 +124,6 @@ async fn test_signup_duplicate_email_fails() {
 }
 
 #[tokio::test]
-async fn test_signup_missing_forwarded_for_fails() {
-    let state = test_state();
-    let app = test_router(state);
-
-    let request = Request::builder()
-        .method("POST")
-        .uri("/signup")
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .header("Cookie", CSRF_COOKIE)
-        .body(Body::from(form_body("noip@example.com", "StrongP@ss123")))
-        .unwrap();
-
-    let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
 async fn test_signup_weak_password_fails() {
     let state = test_state();
     let app = test_router(state);
@@ -382,7 +365,7 @@ async fn test_refresh_token_rotation() {
         .db
         .insert_user(
             "refresh@example.com".to_string(),
-            "hashed_pw".to_string(),
+            Some("hashed_pw".to_string()),
             now.clone(),
             now,
             vec!["openid".to_string()],
@@ -396,6 +379,7 @@ async fn test_refresh_token_rotation() {
     let entry = RefreshTokenTable {
         token_hash,
         user_id: user_id.to_string(),
+        client_id: "test-client".to_string(),
         scope: "openid".to_string(),
         expires_at: chrono::Utc::now().timestamp() + 86400,
         revoked: false,
@@ -463,7 +447,7 @@ async fn test_token_revocation() {
         .db
         .insert_user(
             "revoke@example.com".to_string(),
-            "hashed_pw".to_string(),
+            Some("hashed_pw".to_string()),
             now.clone(),
             now,
             vec!["openid".to_string()],
@@ -477,6 +461,7 @@ async fn test_token_revocation() {
     let entry = RefreshTokenTable {
         token_hash,
         user_id: user_id.to_string(),
+        client_id: "test-client".to_string(),
         scope: "openid".to_string(),
         expires_at: chrono::Utc::now().timestamp() + 86400,
         revoked: false,

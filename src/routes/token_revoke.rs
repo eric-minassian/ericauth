@@ -79,6 +79,7 @@ mod tests {
         let refresh_token = RefreshTokenTable {
             token_hash: token_hash.clone(),
             user_id: "user-1".to_string(),
+            client_id: "test-client".to_string(),
             scope: "openid".to_string(),
             expires_at: chrono::Utc::now().timestamp() + 3600,
             revoked: false,

@@ -1,8 +1,8 @@
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
-    response::IntoResponse,
-    Json,
+    response::{IntoResponse, Redirect},
+    Form, Json,
 };
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -119,9 +119,15 @@ pub async fn register_complete(
     let passkey_json = serde_json::to_string(&passkey)
         .map_err(|e| AuthError::Internal(format!("Failed to serialize passkey: {e}")))?;
 
+    let now = chrono::Utc::now().to_rfc3339();
     state
         .db
-        .insert_credential(&credential_id, &user.user_id.to_string(), &passkey_json)
+        .insert_credential(
+            &credential_id,
+            &user.user_id.to_string(),
+            &passkey_json,
+            &now,
+        )
         .await?;
 
     Ok(StatusCode::CREATED)
@@ -131,7 +137,7 @@ pub async fn register_complete(
 
 #[derive(Deserialize)]
 pub struct AuthBeginPayload {
-    email: String,
+    email: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -151,10 +157,15 @@ pub async fn auth_begin(
     State(state): State<AppState>,
     Json(body): Json<AuthBeginPayload>,
 ) -> Result<impl IntoResponse, AuthError> {
+    let email = body
+        .email
+        .filter(|e| !e.is_empty())
+        .ok_or_else(|| AuthError::BadRequest("email is required".into()))?;
+
     // Look up user by email
     let user = state
         .db
-        .get_user_by_email(body.email)
+        .get_user_by_email(email)
         .await?
         .ok_or_else(|| AuthError::Unauthorized("invalid email or passkey".into()))?;
 
@@ -275,4 +286,37 @@ pub async fn auth_complete(
     );
 
     Ok((StatusCode::NO_CONTENT, response_headers))
+}
+
+// --- Deletion ---
+
+#[derive(Deserialize)]
+pub struct DeletePasskeyPayload {
+    credential_id: String,
+    #[allow(dead_code)]
+    csrf_token: Option<String>,
+}
+
+pub async fn delete(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Form(body): Form<DeletePasskeyPayload>,
+) -> Result<impl IntoResponse, AuthError> {
+    // Verify the credential belongs to this user
+    let credentials = state
+        .db
+        .get_credentials_by_user_id(&user.user_id.to_string())
+        .await?;
+
+    let owns_credential = credentials
+        .iter()
+        .any(|c| c.credential_id == body.credential_id);
+
+    if !owns_credential {
+        return Err(AuthError::NotFound("credential not found".into()));
+    }
+
+    state.db.delete_credential(&body.credential_id).await?;
+
+    Ok(Redirect::to("/passkeys/manage"))
 }

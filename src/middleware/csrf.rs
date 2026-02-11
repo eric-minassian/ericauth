@@ -10,7 +10,14 @@ use base64::Engine;
 use http_body_util::BodyExt;
 
 /// Paths where CSRF protection is applied.
-const CSRF_PROTECTED_PATHS: &[&str] = &["/login", "/signup", "/consent", "/passkeys/manage"];
+const CSRF_PROTECTED_PATHS: &[&str] = &[
+    "/login",
+    "/signup",
+    "/consent",
+    "/passkeys/manage",
+    "/passkeys/delete",
+    "/recover",
+];
 
 /// CSRF token stored in request extensions so handlers can pass it to templates.
 #[derive(Clone)]

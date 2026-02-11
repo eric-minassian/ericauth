@@ -11,7 +11,8 @@ use super::DynamoDb;
 pub struct UserTable {
     pub id: Uuid,
     pub email: String,
-    pub password_hash: String,
+    #[serde(default)]
+    pub password_hash: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     #[serde(default)]
@@ -45,7 +46,7 @@ impl DynamoDb {
     pub async fn insert_user(
         &self,
         email: String,
-        password_hash: String,
+        password_hash: Option<String>,
         created_at: String,
         updated_at: String,
         scopes: Vec<String>,

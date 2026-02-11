@@ -88,7 +88,7 @@ impl Database {
     pub async fn insert_user(
         &self,
         email: String,
-        password_hash: String,
+        password_hash: Option<String>,
         created_at: String,
         updated_at: String,
         scopes: Vec<String>,
@@ -222,14 +222,15 @@ impl Database {
         credential_id: &str,
         user_id: &str,
         passkey_json: &str,
+        created_at: &str,
     ) -> Result<(), AuthError> {
         match self {
             Database::Dynamo(db) => {
-                db.insert_credential(credential_id, user_id, passkey_json)
+                db.insert_credential(credential_id, user_id, passkey_json, created_at)
                     .await
             }
             Database::Memory(db) => {
-                db.insert_credential(credential_id, user_id, passkey_json)
+                db.insert_credential(credential_id, user_id, passkey_json, created_at)
                     .await
             }
         }

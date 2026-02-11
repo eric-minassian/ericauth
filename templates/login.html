@@ -79,10 +79,15 @@
     btn.addEventListener('click', async function() {
         errEl.style.display = 'none';
         try {
+            var emailInput = document.getElementById('email');
+            var authBody = {};
+            if (emailInput && emailInput.value) {
+                authBody.email = emailInput.value;
+            }
             var beginRes = await fetch('/passkeys/auth/begin', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: '{}'
+                body: JSON.stringify(authBody)
             });
             if (!beginRes.ok) throw new Error('Failed to start passkey auth');
             var beginData = await beginRes.json();

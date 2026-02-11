@@ -65,7 +65,7 @@ impl MemoryDb {
     pub async fn insert_user(
         &self,
         email: String,
-        password_hash: String,
+        password_hash: Option<String>,
         created_at: String,
         updated_at: String,
         scopes: Vec<String>,
@@ -242,6 +242,7 @@ impl MemoryDb {
         credential_id: &str,
         user_id: &str,
         passkey_json: &str,
+        created_at: &str,
     ) -> Result<(), AuthError> {
         let mut creds = self
             .credentials
@@ -258,6 +259,8 @@ impl MemoryDb {
                 credential_id: credential_id.to_string(),
                 user_id: user_id.to_string(),
                 passkey_json: passkey_json.to_string(),
+                created_at: created_at.to_string(),
+                last_used_at: None,
             },
         );
 

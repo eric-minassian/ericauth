@@ -72,7 +72,7 @@ mod tests {
             .db
             .insert_user(
                 "test@example.com".to_string(),
-                "hashed_pw".to_string(),
+                Some("hashed_pw".to_string()),
                 now.clone(),
                 now,
                 vec!["openid".to_string(), "email".to_string()],

@@ -9,6 +9,7 @@ use super::DynamoDb;
 pub struct RefreshTokenTable {
     pub token_hash: String,
     pub user_id: String,
+    pub client_id: String,
     pub scope: String,
     pub expires_at: i64,
     pub revoked: bool,

@@ -67,11 +67,13 @@ impl MemoryDb {
         id: String,
         user_id: Uuid,
         expires_at: i64,
+        ip_address: String,
     ) -> Result<(), AuthError> {
         let session = SessionTable {
             id: id.clone(),
             user_id,
             expires_at,
+            ip_address,
         };
 
         let mut sessions = self

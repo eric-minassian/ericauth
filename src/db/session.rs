@@ -11,6 +11,7 @@ pub struct SessionTable {
     pub id: String,
     pub user_id: Uuid,
     pub expires_at: i64,
+    pub ip_address: String,
 }
 
 impl DynamoDb {
@@ -19,11 +20,13 @@ impl DynamoDb {
         id: String,
         user_id: Uuid,
         expires_at: i64,
+        ip_address: String,
     ) -> Result<(), AuthError> {
         let session = SessionTable {
             id,
             user_id,
             expires_at,
+            ip_address,
         };
 
         let item = serde_dynamo::aws_sdk_dynamodb_1::to_item(&session)

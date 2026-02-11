@@ -78,10 +78,11 @@ impl Database {
         id: String,
         user_id: Uuid,
         expires_at: i64,
+        ip_address: String,
     ) -> Result<(), AuthError> {
         match self {
-            Database::Dynamo(db) => db.insert_session(id, user_id, expires_at).await,
-            Database::Memory(db) => db.insert_session(id, user_id, expires_at).await,
+            Database::Dynamo(db) => db.insert_session(id, user_id, expires_at, ip_address).await,
+            Database::Memory(db) => db.insert_session(id, user_id, expires_at, ip_address).await,
         }
     }
 

@@ -623,7 +623,7 @@ Each task is scoped to a single commit. Tasks within a phase are ordered by depe
 
 ---
 
-### 4.3 — Implement signup page
+### 4.3 — ~~Implement signup page~~ DONE
 
 **Files:** new `templates/signup.html`, new `src/routes/signup_page.rs`, `src/routes/mod.rs`
 

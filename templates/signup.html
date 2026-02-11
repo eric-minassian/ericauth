@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Sign Up — EricAuth{% endblock %}
+
+{% block content %}
+<h1>Sign Up</h1>
+
+{% if let Some(err) = error %}
+<div class="error-msg">{{ err }}</div>
+{% endif %}
+
+<form method="POST" action="/signup" id="signup-form">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" required autocomplete="email">
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" required autocomplete="new-password">
+
+    <label for="confirm_password">Confirm Password</label>
+    <input type="password" id="confirm_password" name="confirm_password" required autocomplete="new-password">
+
+    <ul class="password-reqs">
+        <li>At least 8 characters</li>
+        <li>At least one uppercase letter</li>
+        <li>At least one lowercase letter</li>
+        <li>At least one digit</li>
+    </ul>
+
+    <div id="password-error" class="error-msg" style="display:none;"></div>
+
+    <button type="submit" class="btn btn-primary">Sign Up</button>
+</form>
+
+<div class="link-row">
+    Already have an account? <a href="/login">Log in</a>
+</div>
+
+<script>
+document.getElementById('signup-form').addEventListener('submit', function(e) {
+    var pw = document.getElementById('password').value;
+    var cpw = document.getElementById('confirm_password').value;
+    var errEl = document.getElementById('password-error');
+    if (pw !== cpw) {
+        e.preventDefault();
+        errEl.textContent = 'Passwords do not match.';
+        errEl.style.display = 'block';
+    } else {
+        errEl.style.display = 'none';
+    }
+});
+</script>
+{% endblock %}
+
+{% block head %}
+<style>
+    .password-reqs {
+        font-size: 0.8rem;
+        color: #666;
+        margin: -0.5rem 0 1rem 1.25rem;
+    }
+    .password-reqs li { margin-bottom: 0.15rem; }
+</style>
+{% endblock %}

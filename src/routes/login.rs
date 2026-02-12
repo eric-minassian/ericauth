@@ -34,8 +34,15 @@ pub async fn handler(
     headers: HeaderMap,
     Form(body): Form<LoginPayload>,
 ) -> Response {
+    let submitted_email = if body.email.trim().is_empty() {
+        None
+    } else {
+        Some(body.email.trim().to_string())
+    };
+
     // Build OAuth query string for error redirects before consuming body
     let error_qs = build_oauth_qs(&[
+        ("email", &submitted_email),
         ("client_id", &body.client_id),
         ("redirect_uri", &body.redirect_uri),
         ("response_type", &body.response_type),

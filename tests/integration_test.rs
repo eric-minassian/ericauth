@@ -153,6 +153,7 @@ async fn test_signup_weak_password_fails() {
         .to_str()
         .unwrap();
     assert!(location.contains("error="));
+    assert!(location.contains("email=weak%40example.com"));
 }
 
 // --- Login flow ---
@@ -249,6 +250,7 @@ async fn test_login_wrong_password_fails() {
         .to_str()
         .unwrap();
     assert!(location.contains("error="));
+    assert!(location.contains("email=wrongpw%40example.com"));
 }
 
 #[tokio::test]
@@ -277,6 +279,55 @@ async fn test_login_nonexistent_user_fails() {
         .to_str()
         .unwrap();
     assert!(location.contains("error="));
+}
+
+#[tokio::test]
+async fn test_recover_wrong_code_preserves_email() {
+    let state = test_state();
+
+    // Create a user first.
+    let app = test_router(state.clone());
+    let signup_request = Request::builder()
+        .method("POST")
+        .uri("/signup")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", CSRF_COOKIE)
+        .header("X-Forwarded-For", "1.2.3.4")
+        .body(Body::from(form_body(
+            "recover@example.com",
+            "StrongP@ss123",
+        )))
+        .unwrap();
+    let signup_response = app.oneshot(signup_request).await.unwrap();
+    assert_eq!(signup_response.status(), StatusCode::OK);
+
+    // Recover with wrong code should redirect and keep email.
+    let app = test_router(state);
+    let recover_body = format!(
+        "email={}&recovery_code={}&csrf_token={}",
+        urlencoding::encode("recover@example.com"),
+        urlencoding::encode("WRONGCODE123"),
+        CSRF_TOKEN,
+    );
+    let recover_request = Request::builder()
+        .method("POST")
+        .uri("/recover")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", CSRF_COOKIE)
+        .header("X-Forwarded-For", "1.2.3.4")
+        .body(Body::from(recover_body))
+        .unwrap();
+
+    let response = app.oneshot(recover_request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let location = response
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(location.contains("error="));
+    assert!(location.contains("email=recover%40example.com"));
 }
 
 // --- Session validation ---
@@ -581,6 +632,20 @@ async fn test_signup_page_returns_html() {
         .to_str()
         .unwrap();
     assert!(content_type.contains("text/html"));
+}
+
+#[tokio::test]
+async fn test_favicon_route_returns_no_content() {
+    let state = test_state();
+    let app = test_router(state);
+
+    let request = Request::builder()
+        .uri("/favicon.ico")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
 }
 
 // --- JWKS endpoint ---

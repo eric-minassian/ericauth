@@ -7,6 +7,7 @@ use crate::{error::AuthError, middleware::csrf::CsrfToken, templates::render};
 #[derive(Deserialize)]
 pub struct LoginPageQuery {
     error: Option<String>,
+    email: Option<String>,
     redirect_uri: Option<String>,
     state: Option<String>,
     client_id: Option<String>,
@@ -22,6 +23,7 @@ pub struct LoginPageQuery {
 struct LoginTemplate {
     csrf_token: String,
     error: Option<String>,
+    email: Option<String>,
     redirect_uri: Option<String>,
     state: Option<String>,
     client_id: Option<String>,
@@ -51,6 +53,7 @@ pub async fn handler(
     render(&LoginTemplate {
         csrf_token: csrf.0,
         error: params.error,
+        email: params.email,
         redirect_uri: params.redirect_uri,
         state: params.state,
         client_id: params.client_id,

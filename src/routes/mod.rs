@@ -1,5 +1,6 @@
 pub(crate) mod authorize;
 mod consent;
+mod favicon;
 mod health;
 mod jwks;
 mod login;
@@ -74,6 +75,7 @@ pub fn router(state: AppState) -> Router {
 
     // All other routes (no rate limit, no CORS)
     let other_routes = Router::new()
+        .route("/favicon.ico", get(favicon::handler))
         .route("/health", get(health::handler))
         .route("/logout", post(logout::handler))
         .route(

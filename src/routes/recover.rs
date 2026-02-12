@@ -27,6 +27,12 @@ pub async fn handler(
     headers: HeaderMap,
     Form(body): Form<RecoverPayload>,
 ) -> Response {
+    let submitted_email = if body.email.trim().is_empty() {
+        None
+    } else {
+        Some(body.email.trim().to_string())
+    };
+
     match try_recover(state, headers, body).await {
         Ok(resp) => resp,
         Err(err) => {
@@ -38,7 +44,15 @@ pub async fn handler(
                 | AuthError::NotFound(m)
                 | AuthError::TooManyRequests(m) => m,
             };
-            let redirect_url = format!("/recover?error={}", urlencoding::encode(msg));
+            let redirect_url = if let Some(email) = submitted_email {
+                format!(
+                    "/recover?error={}&email={}",
+                    urlencoding::encode(msg),
+                    urlencoding::encode(&email)
+                )
+            } else {
+                format!("/recover?error={}", urlencoding::encode(msg))
+            };
             Redirect::to(&redirect_url).into_response()
         }
     }

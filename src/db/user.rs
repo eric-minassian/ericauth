@@ -52,12 +52,8 @@ impl DynamoDb {
         scopes: Vec<String>,
         recovery_codes: Vec<String>,
     ) -> Result<Uuid, AuthError> {
-        if self.get_user_by_email(email.clone()).await?.is_some() {
-            return Err(AuthError::Conflict("email already in use".to_string()));
-        }
-
         let user = UserTable {
-            id: Uuid::new_v4(),
+            id: Uuid::new_v5(&Uuid::NAMESPACE_DNS, email.as_bytes()),
             email,
             password_hash,
             created_at,
@@ -73,9 +69,17 @@ impl DynamoDb {
             .put_item()
             .table_name(&self.users_table)
             .set_item(Some(item))
+            .condition_expression("attribute_not_exists(id)")
             .send()
             .await
-            .map_err(|e| AuthError::Internal(format!("Failed to insert user: {e}")))?;
+            .map_err(|e| {
+                let service_err = e.into_service_error();
+                if service_err.is_conditional_check_failed_exception() {
+                    AuthError::Conflict("email already in use".to_string())
+                } else {
+                    AuthError::Internal(format!("Failed to insert user: {service_err}"))
+                }
+            })?;
 
         Ok(user.id)
     }

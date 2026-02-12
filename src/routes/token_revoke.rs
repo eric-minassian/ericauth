@@ -7,7 +7,6 @@ use crate::{error::AuthError, state::AppState};
 #[derive(Deserialize)]
 pub struct RevokeRequest {
     token: String,
-    #[allow(dead_code)]
     token_type_hint: Option<String>,
 }
 
@@ -15,6 +14,12 @@ pub async fn handler(
     State(state): State<AppState>,
     Form(body): Form<RevokeRequest>,
 ) -> Result<impl IntoResponse, AuthError> {
+    if let Some(hint) = body.token_type_hint.as_deref() {
+        if !matches!(hint, "refresh_token" | "access_token") {
+            tracing::debug!("unknown token_type_hint provided: {hint}");
+        }
+    }
+
     let token_hash = hex::encode(Sha256::new().chain(body.token.as_bytes()).finalize());
 
     if let Some(_token) = state.db.get_refresh_token(&token_hash).await? {

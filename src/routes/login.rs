@@ -11,11 +11,10 @@ use crate::{
     password::verify_password_hash,
     session::{create_session, generate_session_token, session_cookie},
     state::AppState,
-    validation::verify_email,
+    validation::{normalize_email, verify_email},
 };
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub struct LoginPayload {
     email: String,
     password: String,
@@ -83,6 +82,8 @@ async fn try_login(
     headers: HeaderMap,
     body: LoginPayload,
 ) -> Result<Response, AuthError> {
+    let normalized_email = normalize_email(&body.email);
+
     // Extract client IP
     let client_ip = headers
         .get("X-Forwarded-For")
@@ -97,12 +98,12 @@ async fn try_login(
         ));
     }
 
-    if !verify_email(&body.email) {
+    if !verify_email(&normalized_email) {
         return Err(AuthError::BadRequest("Invalid email address".to_string()));
     }
 
     // Look up user — perform dummy hash on miss to prevent timing enumeration
-    let user = match state.db.get_user_by_email(body.email).await? {
+    let user = match state.db.get_user_by_email(normalized_email).await? {
         Some(user) => user,
         None => {
             // Dummy Argon2id verification to equalize timing with the found-user path

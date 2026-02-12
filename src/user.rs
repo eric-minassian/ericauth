@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     db::Database, error::AuthError, generate_random_recovery_code, password::hash_password,
+    validation::normalize_email,
 };
 
 pub struct User {
@@ -24,6 +25,8 @@ pub async fn create_user(
     email: String,
     password: String,
 ) -> Result<User, AuthError> {
+    let email = normalize_email(&email);
+
     let password_hash =
         Some(hash_password(&password).map_err(|e| AuthError::Internal(e.to_string()))?);
 

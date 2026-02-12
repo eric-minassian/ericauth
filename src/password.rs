@@ -28,7 +28,7 @@ pub fn verify_password_strength(password: &str) -> bool {
     // @TODO: Add haveibeenpwned check
     // https://haveibeenpwned.com/API/v3
 
-    password.len() > 8
+    password.len() >= 8
         && password.len() < 128
         && password.chars().any(|c| c.is_ascii_uppercase())
         && password.chars().any(|c| c.is_ascii_lowercase())

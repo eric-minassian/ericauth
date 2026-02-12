@@ -7,6 +7,7 @@ use crate::{error::AuthError, middleware::csrf::CsrfToken, templates::render};
 #[derive(Deserialize)]
 pub struct RecoverPageQuery {
     error: Option<String>,
+    email: Option<String>,
 }
 
 #[derive(Template)]
@@ -14,6 +15,7 @@ pub struct RecoverPageQuery {
 struct RecoverTemplate {
     csrf_token: String,
     error: Option<String>,
+    email: Option<String>,
 }
 
 pub async fn handler(
@@ -23,5 +25,6 @@ pub async fn handler(
     render(&RecoverTemplate {
         csrf_token: csrf.0,
         error: params.error,
+        email: params.email,
     })
 }

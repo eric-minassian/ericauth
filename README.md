@@ -37,6 +37,7 @@ Other commands:
 
 ```sh
 make test    # Run tests
+make e2e     # Run Playwright browser E2E tests
 make lint    # cargo fmt --check + clippy
 make fmt     # Auto-format code
 ```
@@ -70,7 +71,7 @@ make deploy-prod     # Deploy prod
 
 ## CI/CD Setup
 
-CI runs on PRs (lint, test, build, CDK synth). Pushes to `main` deploy to beta, run e2e tests, then deploy to prod.
+CI runs on PRs (lint, unit/integration tests, Playwright E2E, CDK synth). Pushes to `main` deploy to beta and then prod.
 
 ### AWS OIDC Setup (once per account)
 

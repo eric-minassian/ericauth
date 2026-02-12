@@ -13,6 +13,10 @@ lint:
 	cargo fmt --all -- --check
 	cargo clippy --all-targets --all-features
 
+## Run browser end-to-end tests
+e2e:
+	cd tests/e2e && pnpm install && pnpm exec playwright install --with-deps chromium && pnpm test
+
 ## Format code
 fmt:
 	cargo fmt --all
@@ -58,4 +62,4 @@ synth:
 login:
 	aws sso login --sso-session ericminassian
 
-.PHONY: watch test lint fmt build build-release deploy-dev deploy-beta deploy-prod deploy-oidc-beta deploy-oidc-prod synth login
+.PHONY: watch test lint e2e fmt build build-release deploy-dev deploy-beta deploy-prod deploy-oidc-beta deploy-oidc-prod synth login

@@ -12,7 +12,7 @@
 <form method="POST" action="/login">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label for="email">Email</label>
-    <input type="email" id="email" name="email" required autocomplete="email">
+    <input type="email" id="email" name="email" required autocomplete="email" {% if let Some(e) = email %}value="{{ e }}"{% endif %}>
 
     <label for="password">Password</label>
     <input type="password" id="password" name="password" required autocomplete="current-password">
@@ -127,7 +127,28 @@
             });
             if (!completeRes.ok) throw new Error('Passkey authentication failed');
 
-            window.location.href = '/passkeys/manage';
+            var oauthKeys = [
+                'client_id',
+                'redirect_uri',
+                'response_type',
+                'scope',
+                'state',
+                'code_challenge',
+                'code_challenge_method',
+                'nonce'
+            ];
+            var oauthParams = new URLSearchParams();
+            for (var i = 0; i < oauthKeys.length; i++) {
+                var key = oauthKeys[i];
+                var input = document.querySelector('input[name="' + key + '"]');
+                if (input && input.value) oauthParams.set(key, input.value);
+            }
+
+            if (oauthParams.get('client_id') && oauthParams.get('redirect_uri')) {
+                window.location.href = '/authorize?' + oauthParams.toString();
+            } else {
+                window.location.href = '/passkeys/manage';
+            }
         } catch (e) {
             errEl.textContent = e.message || 'Passkey authentication failed';
             errEl.style.display = 'block';

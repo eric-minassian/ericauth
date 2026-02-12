@@ -69,6 +69,34 @@ impl DynamoDb {
         Ok(credentials)
     }
 
+    pub async fn get_credential_by_id(
+        &self,
+        credential_id: &str,
+    ) -> Result<Option<CredentialTable>, AuthError> {
+        let response = self
+            .client
+            .get_item()
+            .table_name(&self.credentials_table)
+            .key(
+                "credential_id",
+                AttributeValue::S(credential_id.to_string()),
+            )
+            .send()
+            .await
+            .map_err(|e| AuthError::Internal(format!("DynamoDB get credential failed: {e}")))?;
+
+        match response.item {
+            Some(item) => {
+                let cred = serde_dynamo::aws_sdk_dynamodb_1::from_item::<CredentialTable>(item)
+                    .map_err(|e| {
+                        AuthError::Internal(format!("Failed to deserialize credential: {e}"))
+                    })?;
+                Ok(Some(cred))
+            }
+            None => Ok(None),
+        }
+    }
+
     pub async fn update_credential(
         &self,
         credential_id: &str,

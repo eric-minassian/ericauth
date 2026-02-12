@@ -32,11 +32,11 @@ base64 = "0.22"
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 p256 = { version = "0.13", features = ["ecdsa", "pem"] }
 url = "2"
-uuid = { version = "1.13.1", features = ["v4", "fast-rng", "serde"] }
+uuid = { version = "1.13.1", features = ["v4", "v5", "fast-rng", "serde"] }
 askama = "0.15"
 openssl = { version = "0.10", features = ["vendored"] }
 urlencoding = "2"
-webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"] }
+webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation", "conditional-ui"] }
 
 [lints.rust]
 unsafe_code = "forbid"

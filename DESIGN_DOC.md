@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-EricAuth is a self-hosted authentication and authorization service built in Rust, deployed as serverless Lambda functions on AWS. It provides:
+EricAuth is a self-hosted authentication and authorization service built in Rust, deployed as a single serverless Lambda on AWS. It provides:
 
 - **Authentication (AuthN):** Email/password login and WebAuthn passkeys (passwordless)
 - **Authorization (AuthZ):** Scope-based access control via JWT tokens
@@ -15,7 +15,7 @@ The service runs at `auth.ericminassian.com` and serves as the central identity 
 
 ### 2.1 Deployment Model
 
-Serverless Lambda functions behind API Gateway, deployed via AWS CDK. Each endpoint is a separate Lambda binary built with `cargo-lambda`.
+A single serverless Lambda binary (axum router) behind API Gateway, deployed via AWS CDK. API Gateway forwards all routes to this one binary, and route dispatch happens inside axum.
 
 ### 2.2 High-Level Architecture
 
@@ -23,18 +23,12 @@ Serverless Lambda functions behind API Gateway, deployed via AWS CDK. Each endpo
 graph TD
     Client["Client / Browser"]
     APIGW["API Gateway (auth.ericminassian.com)<br/>+ ACM Certificate + Route53 Alias"]
-    AuthN["AuthN Lambdas"]
-    AuthZ["AuthZ Lambdas"]
-    OIDC["OIDC Lambdas"]
+    Auth["EricAuth Lambda (axum router)"]
     DB["DynamoDB Tables<br/>Users | Credentials | Sessions | AuthCodes | Scopes"]
 
     Client --> APIGW
-    APIGW --> AuthN
-    APIGW --> AuthZ
-    APIGW --> OIDC
-    AuthN --> DB
-    AuthZ --> DB
-    OIDC --> DB
+    APIGW --> Auth
+    Auth --> DB
 ```
 
 ### 2.3 How Other Services Integrate

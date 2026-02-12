@@ -71,27 +71,32 @@ impl MemoryDb {
         scopes: Vec<String>,
         recovery_codes: Vec<String>,
     ) -> Result<Uuid, AuthError> {
-        // Check uniqueness
-        if self.get_user_by_email(email.clone()).await?.is_some() {
-            return Err(AuthError::Conflict("email already in use".to_string()));
-        }
-
-        let id = Uuid::new_v4();
-        let user = UserTable {
-            id,
-            email,
-            password_hash,
-            created_at,
-            updated_at,
-            scopes,
-            recovery_codes,
-        };
-
         let mut users = self
             .users
             .write()
             .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
-        users.insert(id, user);
+
+        if users.values().any(|u| u.email == email) {
+            return Err(AuthError::Conflict("email already in use".to_string()));
+        }
+
+        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, email.as_bytes());
+        if users.contains_key(&id) {
+            return Err(AuthError::Conflict("email already in use".to_string()));
+        }
+
+        users.insert(
+            id,
+            UserTable {
+                id,
+                email,
+                password_hash,
+                created_at,
+                updated_at,
+                scopes,
+                recovery_codes,
+            },
+        );
 
         Ok(id)
     }
@@ -281,6 +286,18 @@ impl MemoryDb {
             .filter(|c| c.user_id == user_id)
             .cloned()
             .collect())
+    }
+
+    pub async fn get_credential_by_id(
+        &self,
+        credential_id: &str,
+    ) -> Result<Option<CredentialTable>, AuthError> {
+        let creds = self
+            .credentials
+            .read()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        Ok(creds.get(credential_id).cloned())
     }
 
     pub async fn update_credential(

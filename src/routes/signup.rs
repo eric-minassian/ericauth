@@ -14,11 +14,10 @@ use crate::{
     state::AppState,
     templates::render,
     user::create_user,
-    validation::verify_email,
+    validation::{normalize_email, verify_email},
 };
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub struct SignupPayload {
     email: String,
     password: String,
@@ -92,6 +91,8 @@ async fn try_signup(
     headers: HeaderMap,
     body: SignupPayload,
 ) -> Result<Response, AuthError> {
+    let normalized_email = normalize_email(&body.email);
+
     // Extract client IP
     let client_ip = headers
         .get("X-Forwarded-For")
@@ -106,14 +107,14 @@ async fn try_signup(
         ));
     }
 
-    if !verify_email(&body.email) {
+    if !verify_email(&normalized_email) {
         return Err(AuthError::BadRequest("Invalid email address".to_string()));
     }
 
     // Check if email already in use
     if state
         .db
-        .get_user_by_email(body.email.clone())
+        .get_user_by_email(normalized_email.clone())
         .await?
         .is_some()
     {
@@ -129,7 +130,7 @@ async fn try_signup(
     }
 
     // Create user and session
-    let user = create_user(&state.db, body.email, body.password).await?;
+    let user = create_user(&state.db, normalized_email, body.password).await?;
 
     let session_token = generate_session_token()?;
 

@@ -80,7 +80,6 @@ pub async fn get_handler(
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub struct ConsentForm {
     action: String,
     client_id: String,
@@ -119,9 +118,13 @@ pub async fn post_handler(
         url.push_str("error=access_denied");
         if let Some(s) = &form.state {
             url.push_str("&state=");
-            url.push_str(s);
+            url.push_str(&urlencoding::encode(s));
         }
         return Ok(Redirect::temporary(&url));
+    }
+
+    if form.response_type.as_deref() != Some("code") {
+        return Err(AuthError::BadRequest("invalid response_type".into()));
     }
 
     // Generate an authorization code
@@ -129,6 +132,11 @@ pub async fn post_handler(
         .code_challenge
         .as_deref()
         .ok_or_else(|| AuthError::BadRequest("missing code_challenge".into()))?;
+    if form.code_challenge_method.as_deref() != Some("S256") {
+        return Err(AuthError::BadRequest(
+            "invalid code_challenge_method".into(),
+        ));
+    }
 
     let raw_code = authorize::create_authorization_code(
         &state,

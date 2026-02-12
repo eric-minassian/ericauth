@@ -11,15 +11,15 @@ use crate::{
     error::AuthError,
     session::{create_session, generate_session_token, session_cookie},
     state::AppState,
-    validation::verify_email,
+    validation::{normalize_email, verify_email},
 };
 
 #[derive(Deserialize)]
 pub struct RecoverPayload {
     email: String,
     recovery_code: String,
-    #[allow(dead_code)]
-    csrf_token: Option<String>,
+    #[serde(rename = "csrf_token")]
+    _csrf_token: Option<String>,
 }
 
 pub async fn handler(
@@ -49,20 +49,22 @@ async fn try_recover(
     headers: HeaderMap,
     body: RecoverPayload,
 ) -> Result<Response, AuthError> {
+    let normalized_email = normalize_email(&body.email);
+
     if body.email.is_empty() || body.recovery_code.is_empty() {
         return Err(AuthError::BadRequest(
             "Email and recovery code are required".to_string(),
         ));
     }
 
-    if !verify_email(&body.email) {
+    if !verify_email(&normalized_email) {
         return Err(AuthError::BadRequest("Invalid email address".to_string()));
     }
 
     // Look up user by email
     let user = state
         .db
-        .get_user_by_email(body.email)
+        .get_user_by_email(normalized_email)
         .await?
         .ok_or_else(|| AuthError::Unauthorized("Invalid email or recovery code".into()))?;
 

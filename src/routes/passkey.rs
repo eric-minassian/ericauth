@@ -15,6 +15,7 @@ use crate::{
     middleware::auth::AuthenticatedUser,
     session::{create_session, generate_session_token, session_cookie},
     state::AppState,
+    validation::normalize_email,
 };
 
 // --- Registration ---
@@ -148,57 +149,80 @@ pub struct AuthBeginResponse {
 
 /// Stored alongside the challenge so we know which user is authenticating.
 #[derive(Serialize, Deserialize)]
-struct AuthChallengeState {
-    user_id: String,
-    passkey_authentication: PasskeyAuthentication,
+enum AuthChallengeState {
+    Identified {
+        user_id: String,
+        passkey_authentication: PasskeyAuthentication,
+    },
+    Discoverable {
+        discoverable_authentication: DiscoverableAuthentication,
+    },
 }
 
 pub async fn auth_begin(
     State(state): State<AppState>,
     Json(body): Json<AuthBeginPayload>,
 ) -> Result<impl IntoResponse, AuthError> {
-    let email = body
-        .email
-        .filter(|e| !e.is_empty())
-        .ok_or_else(|| AuthError::BadRequest("email is required".into()))?;
+    let challenge_state = if let Some(email) = body.email.filter(|e| !e.is_empty()) {
+        // Email provided: authenticate against this user's passkeys.
+        let user = state
+            .db
+            .get_user_by_email(normalize_email(&email))
+            .await?
+            .ok_or_else(|| AuthError::Unauthorized("invalid email or passkey".into()))?;
 
-    // Look up user by email
-    let user = state
-        .db
-        .get_user_by_email(email)
-        .await?
-        .ok_or_else(|| AuthError::Unauthorized("invalid email or passkey".into()))?;
+        let cred_records = state
+            .db
+            .get_credentials_by_user_id(&user.id.to_string())
+            .await?;
 
-    // Load credentials for the user
-    let cred_records = state
-        .db
-        .get_credentials_by_user_id(&user.id.to_string())
-        .await?;
+        if cred_records.is_empty() {
+            return Err(AuthError::Unauthorized("no passkeys registered".into()));
+        }
 
-    if cred_records.is_empty() {
-        return Err(AuthError::Unauthorized("no passkeys registered".into()));
-    }
+        let passkeys: Vec<Passkey> = cred_records
+            .iter()
+            .filter_map(|c| serde_json::from_str(&c.passkey_json).ok())
+            .collect();
 
-    let passkeys: Vec<Passkey> = cred_records
-        .iter()
-        .filter_map(|c| serde_json::from_str(&c.passkey_json).ok())
-        .collect();
+        if passkeys.is_empty() {
+            return Err(AuthError::Internal("failed to deserialize passkeys".into()));
+        }
 
-    if passkeys.is_empty() {
-        return Err(AuthError::Internal("failed to deserialize passkeys".into()));
-    }
+        let (rcr, passkey_authentication) = state
+            .webauthn
+            .start_passkey_authentication(&passkeys)
+            .map_err(|e| {
+                AuthError::Internal(format!("WebAuthn authentication start failed: {e}"))
+            })?;
 
-    let (rcr, passkey_authentication) = state
-        .webauthn
-        .start_passkey_authentication(&passkeys)
-        .map_err(|e| AuthError::Internal(format!("WebAuthn authentication start failed: {e}")))?;
+        (
+            rcr,
+            AuthChallengeState::Identified {
+                user_id: user.id.to_string(),
+                passkey_authentication,
+            },
+        )
+    } else {
+        // No email: start discoverable authentication flow.
+        let (rcr, discoverable_authentication) = state
+            .webauthn
+            .start_discoverable_authentication()
+            .map_err(|e| {
+                AuthError::Internal(format!("WebAuthn discoverable authentication failed: {e}"))
+            })?;
+
+        (
+            rcr,
+            AuthChallengeState::Discoverable {
+                discoverable_authentication,
+            },
+        )
+    };
 
     // Store the authentication state as a challenge (5 min TTL)
     let challenge_id = Uuid::new_v4().to_string();
-    let challenge_state = AuthChallengeState {
-        user_id: user.id.to_string(),
-        passkey_authentication,
-    };
+    let (rcr, challenge_state) = challenge_state;
     let challenge_data = serde_json::to_string(&challenge_state)
         .map_err(|e| AuthError::Internal(format!("Failed to serialize auth state: {e}")))?;
 
@@ -233,33 +257,53 @@ pub async fn auth_complete(
     let challenge_state: AuthChallengeState = serde_json::from_str(&challenge_data)
         .map_err(|e| AuthError::Internal(format!("Failed to deserialize auth state: {e}")))?;
 
-    // Complete authentication
-    let auth_result = state
-        .webauthn
-        .finish_passkey_authentication(&body.credential, &challenge_state.passkey_authentication)
-        .map_err(|e| AuthError::Unauthorized(format!("WebAuthn authentication failed: {e}")))?;
-
-    // If credential needs updating (e.g. sign count), update it
-    if auth_result.needs_update() {
-        // Reload the credential and update it
-        let user_id = &challenge_state.user_id;
-        let cred_records = state.db.get_credentials_by_user_id(user_id).await?;
-
-        for cred in &cred_records {
-            if let Ok(mut passkey) = serde_json::from_str::<Passkey>(&cred.passkey_json) {
-                if passkey.cred_id() == auth_result.cred_id() {
-                    passkey.update_credential(&auth_result);
-                    if let Ok(updated_json) = serde_json::to_string(&passkey) {
-                        let _ = state
-                            .db
-                            .update_credential(&cred.credential_id, &updated_json)
-                            .await;
-                    }
-                    break;
-                }
-            }
+    let (user_id, auth_result) = match challenge_state {
+        AuthChallengeState::Identified {
+            user_id,
+            passkey_authentication,
+        } => {
+            let auth_result = state
+                .webauthn
+                .finish_passkey_authentication(&body.credential, &passkey_authentication)
+                .map_err(|e| {
+                    AuthError::Unauthorized(format!("WebAuthn authentication failed: {e}"))
+                })?;
+            (user_id, auth_result)
         }
-    }
+        AuthChallengeState::Discoverable {
+            discoverable_authentication,
+        } => {
+            let (user_uuid, cred_id) = state
+                .webauthn
+                .identify_discoverable_authentication(&body.credential)
+                .map_err(|e| {
+                    AuthError::Unauthorized(format!("WebAuthn authentication failed: {e}"))
+                })?;
+            let credential_id = URL_SAFE_NO_PAD.encode(cred_id);
+            let credential = state
+                .db
+                .get_credential_by_id(&credential_id)
+                .await?
+                .ok_or_else(|| AuthError::Unauthorized("unknown credential".into()))?;
+            let passkey: Passkey = serde_json::from_str(&credential.passkey_json)
+                .map_err(|e| AuthError::Internal(format!("Failed to deserialize passkey: {e}")))?;
+
+            let auth_result = state
+                .webauthn
+                .finish_discoverable_authentication(
+                    &body.credential,
+                    discoverable_authentication,
+                    &[DiscoverableKey::from(passkey)],
+                )
+                .map_err(|e| {
+                    AuthError::Unauthorized(format!("WebAuthn authentication failed: {e}"))
+                })?;
+            (user_uuid.to_string(), auth_result)
+        }
+    };
+
+    // Update authenticator counter/signature metadata.
+    update_passkey_authentication_state(&state, &user_id, &auth_result).await?;
 
     // Extract client IP
     let client_ip = headers
@@ -269,7 +313,7 @@ pub async fn auth_complete(
         .to_string();
 
     // Create session
-    let user_uuid = Uuid::parse_str(&challenge_state.user_id)
+    let user_uuid = Uuid::parse_str(&user_id)
         .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
 
     let session_token = generate_session_token()?;
@@ -293,8 +337,8 @@ pub async fn auth_complete(
 #[derive(Deserialize)]
 pub struct DeletePasskeyPayload {
     credential_id: String,
-    #[allow(dead_code)]
-    csrf_token: Option<String>,
+    #[serde(rename = "csrf_token")]
+    _csrf_token: Option<String>,
 }
 
 pub async fn delete(
@@ -319,4 +363,36 @@ pub async fn delete(
     state.db.delete_credential(&body.credential_id).await?;
 
     Ok(Redirect::to("/passkeys/manage"))
+}
+
+async fn update_passkey_authentication_state(
+    state: &AppState,
+    user_id: &str,
+    auth_result: &AuthenticationResult,
+) -> Result<(), AuthError> {
+    if !auth_result.needs_update() {
+        return Ok(());
+    }
+
+    let cred_records = state.db.get_credentials_by_user_id(user_id).await?;
+
+    for cred in &cred_records {
+        if let Ok(mut passkey) = serde_json::from_str::<Passkey>(&cred.passkey_json) {
+            if passkey.cred_id() == auth_result.cred_id() {
+                passkey.update_credential(auth_result);
+                let updated_json = serde_json::to_string(&passkey).map_err(|e| {
+                    AuthError::Internal(format!("Failed to serialize passkey update: {e}"))
+                })?;
+                state
+                    .db
+                    .update_credential(&cred.credential_id, &updated_json)
+                    .await?;
+                return Ok(());
+            }
+        }
+    }
+
+    Err(AuthError::Internal(
+        "authenticated passkey not found for user".into(),
+    ))
 }

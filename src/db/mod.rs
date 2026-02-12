@@ -246,6 +246,16 @@ impl Database {
         }
     }
 
+    pub async fn get_credential_by_id(
+        &self,
+        credential_id: &str,
+    ) -> Result<Option<CredentialTable>, AuthError> {
+        match self {
+            Database::Dynamo(db) => db.get_credential_by_id(credential_id).await,
+            Database::Memory(db) => db.get_credential_by_id(credential_id).await,
+        }
+    }
+
     pub async fn update_credential(
         &self,
         credential_id: &str,

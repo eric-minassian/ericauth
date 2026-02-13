@@ -1,4 +1,4 @@
-import { Stack, StackProps } from "aws-cdk-lib";
+import { CfnOutput, Stack, StackProps } from "aws-cdk-lib";
 import {
   Certificate,
   CertificateValidation,
@@ -45,6 +45,8 @@ export class EricAuthStack extends Stack {
       jwtSecret,
     });
 
+    let api: Api;
+
     if (props.domainName && props.hostedZoneDomain) {
       // Custom domain with ACM + Route53
       const hostedZone = HostedZone.fromLookup(this, "HostedZone", {
@@ -56,7 +58,7 @@ export class EricAuthStack extends Stack {
         validation: CertificateValidation.fromDns(hostedZone),
       });
 
-      const api = new Api(this, "ApiGateway", {
+      api = new Api(this, "ApiGateway", {
         handler: lambda.handler,
         domainName: props.domainName,
         certificate,
@@ -74,9 +76,14 @@ export class EricAuthStack extends Stack {
       });
     } else {
       // No custom domain — use API Gateway default URL
-      new Api(this, "ApiGateway", {
+      api = new Api(this, "ApiGateway", {
         handler: lambda.handler,
       });
     }
+
+    new CfnOutput(this, "ApiUrl", {
+      value: props.domainName ? `https://${props.domainName}` : api.api.apiEndpoint,
+      description: "Public base URL for EricAuth",
+    });
   }
 }

@@ -29,3 +29,8 @@ Avoid CSS/XPath selectors unless absolutely necessary.
 
 - Config keeps traces/screenshots/videos on failure for debugging.
 - Artifacts are written to `/tmp/ericauth-playwright-results` to avoid triggering Rust file-watch reloads.
+
+## Running against deployed environments
+
+- Set `E2E_BASE_URL` to run tests against a deployed stack (beta/prod) instead of local `cargo lambda watch`.
+- Example: `E2E_BASE_URL=https://example.execute-api.us-east-1.amazonaws.com pnpm test`.

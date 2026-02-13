@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-Dwarnings"
@@ -98,6 +102,17 @@ jobs:
       - name: Install cargo-lambda
         run: pip install cargo-lambda
 
+      - name: Cache cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-e2e-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-e2e-
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -111,7 +126,7 @@ jobs:
           cache-dependency-path: tests/e2e/pnpm-lock.yaml
 
       - name: Install E2E dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
         working-directory: tests/e2e
 
       - name: Install Playwright browser
@@ -121,3 +136,13 @@ jobs:
       - name: Run E2E tests
         run: pnpm test
         working-directory: tests/e2e
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            /tmp/ericauth-playwright-results
+            tests/e2e/playwright-report
+          if-no-files-found: ignore

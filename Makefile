@@ -15,7 +15,7 @@ lint:
 
 ## Run browser end-to-end tests
 e2e:
-	cd tests/e2e && pnpm install && pnpm exec playwright install --with-deps chromium && pnpm test
+	cd tests/e2e && pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium && pnpm test
 
 ## Format code
 fmt:

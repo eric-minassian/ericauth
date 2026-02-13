@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const baseURL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:9000';
+const useLocalWebServer = !process.env.E2E_BASE_URL;
+
 export default defineConfig({
   testDir: '.',
   testMatch: /.*\.spec\.ts/,
@@ -11,7 +14,7 @@ export default defineConfig({
     timeout: 10_000,
   },
   use: {
-    baseURL: 'http://127.0.0.1:9000',
+    baseURL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -22,12 +25,14 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command:
-      'ENCRYPTION_KEY=01234567890123456789012345678901 DATABASE_BACKEND=memory cargo lambda watch --invoke-address 127.0.0.1 --invoke-port 9000',
-    cwd: '../..',
-    url: 'http://127.0.0.1:9000/health',
-    reuseExistingServer: !process.env.CI,
-    timeout: 420_000,
-  },
+  webServer: useLocalWebServer
+    ? {
+        command:
+          'ENCRYPTION_KEY=01234567890123456789012345678901 DATABASE_BACKEND=memory cargo lambda watch --ignore-changes --invoke-address 127.0.0.1 --invoke-port 9000',
+        cwd: '../..',
+        url: 'http://127.0.0.1:9000/health',
+        reuseExistingServer: !process.env.CI,
+        timeout: 300_000,
+      }
+    : undefined,
 });

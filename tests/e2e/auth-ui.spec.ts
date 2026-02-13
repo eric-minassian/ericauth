@@ -10,7 +10,7 @@ import {
 import { uniqueEmail } from './utils/test-data';
 
 test.describe('Auth UI', () => {
-  test('renders core auth pages', async ({ page }) => {
+  test('renders core auth pages @smoke', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const signupPage = new SignupPage(page);
     const recoverPage = new RecoverPage(page);

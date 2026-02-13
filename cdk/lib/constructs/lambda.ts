@@ -31,6 +31,7 @@ export class Lambda extends Construct {
       environment: {
         USERS_TABLE_NAME: props.usersTable.tableName,
         SESSIONS_TABLE_NAME: props.sessionsTable.tableName,
+        SESSIONS_USER_ID_INDEX_NAME: "userIdIndex",
         REFRESH_TOKENS_TABLE_NAME: props.refreshTokensTable.tableName,
         CREDENTIALS_TABLE_NAME: props.credentialsTable.tableName,
         CHALLENGES_TABLE_NAME: props.challengesTable.tableName,

@@ -97,6 +97,10 @@ async fn try_login(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("unknown")
         .to_string();
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(ToString::to_string);
 
     // Validate input
     if body.email.is_empty() || body.password.is_empty() {
@@ -151,6 +155,7 @@ async fn try_login(
         session_token.clone(),
         user.id,
         client_ip.to_string(),
+        user_agent,
     )
     .await?;
 
@@ -181,6 +186,6 @@ async fn try_login(
         return Ok((response_headers, Redirect::to(&authorize_url)).into_response());
     }
 
-    // Non-OAuth login: redirect to passkeys management
-    Ok((response_headers, Redirect::to("/passkeys/manage")).into_response())
+    // Non-OAuth login: redirect to account management
+    Ok((response_headers, Redirect::to("/account")).into_response())
 }

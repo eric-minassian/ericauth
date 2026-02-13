@@ -311,13 +311,24 @@ pub async fn auth_complete(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("unknown")
         .to_string();
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(ToString::to_string);
 
     // Create session
     let user_uuid = Uuid::parse_str(&user_id)
         .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
 
     let session_token = generate_session_token()?;
-    let session = create_session(&state.db, session_token.clone(), user_uuid, client_ip).await?;
+    let session = create_session(
+        &state.db,
+        session_token.clone(),
+        user_uuid,
+        client_ip,
+        user_agent,
+    )
+    .await?;
 
     // Build response with session cookie
     let (cookie_name, cookie_value) = session_cookie(&session_token, session.expires_at);

@@ -106,6 +106,10 @@ async fn try_signup(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("unknown")
         .to_string();
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(ToString::to_string);
 
     // Validate input
     if body.email.is_empty() || body.password.is_empty() {
@@ -146,6 +150,7 @@ async fn try_signup(
         session_token.clone(),
         user.id,
         client_ip.to_string(),
+        user_agent,
     )
     .await?;
 

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Account - EricAuth{% endblock %}
+
+{% block content %}
+<h1>Account Security</h1>
+
+{% if let Some(msg) = notice %}
+<div class="success-msg">{{ msg }}</div>
+{% endif %}
+{% if let Some(msg) = error %}
+<div class="error-msg">{{ msg }}</div>
+{% endif %}
+
+<p style="font-size: 0.875rem; color: #a1a1aa; margin-bottom: 1rem;">
+    Signed in as <strong>{{ email }}</strong>
+</p>
+
+<div style="border: 1px solid #27272a; border-radius: 6px; padding: 0.75rem; margin-bottom: 1rem;">
+    <p style="font-size: 0.875rem; color: #d4d4d8; margin-bottom: 0.35rem;"><strong>Passkeys:</strong> {{ passkey_count }}</p>
+    <p style="font-size: 0.875rem; color: #d4d4d8; margin-bottom: 0.35rem;"><strong>Recovery codes:</strong> {{ recovery_codes_remaining }}</p>
+    <p style="font-size: 0.875rem; color: #d4d4d8; margin-bottom: 0.35rem;"><strong>Active sessions:</strong> {{ session_count }}</p>
+    <p style="font-size: 0.875rem; color: #d4d4d8;"><strong>Password login:</strong> {% if has_password_login %}Enabled{% else %}Disabled{% endif %}</p>
+</div>
+
+<a class="btn btn-secondary" href="/passkeys/manage">Manage Passkeys</a>
+<a class="btn btn-secondary" href="/account/sessions">Manage Sessions</a>
+<a class="btn btn-secondary" href="/account/password">Change Password</a>
+
+<form method="POST" action="/account/recovery-codes/regenerate" style="margin-top: 0.75rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-secondary">Regenerate Recovery Codes</button>
+</form>
+
+<form method="POST" action="/logout">
+    <button type="submit" class="btn btn-primary" style="margin-top: 0.75rem;">Log Out</button>
+</form>
+{% endblock %}

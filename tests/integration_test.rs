@@ -45,6 +45,17 @@ fn form_body(email: &str, password: &str) -> String {
     )
 }
 
+fn extract_session_cookie(set_cookie: &str) -> String {
+    set_cookie.split(';').next().unwrap().to_string()
+}
+
+fn session_id_from_cookie(session_cookie: &str) -> String {
+    let token = session_cookie
+        .strip_prefix("session=")
+        .expect("session cookie should start with session=");
+    hex::encode(Sha256::new().chain(token.as_bytes()).finalize())
+}
+
 // --- Health endpoint ---
 
 #[tokio::test]
@@ -195,7 +206,7 @@ async fn test_signup_then_login() {
         .unwrap()
         .to_str()
         .unwrap();
-    assert_eq!(location, "/passkeys/manage");
+    assert_eq!(location, "/account");
 
     // Should have a session cookie
     let set_cookie = response
@@ -362,10 +373,10 @@ async fn test_session_cookie_grants_access_to_protected_route() {
         .unwrap();
     let session_value = set_cookie.split(';').next().unwrap(); // "session=..."
 
-    // Use session to access /passkeys/manage (requires AuthenticatedUser)
+    // Use session to access /account (requires AuthenticatedUser)
     let app = test_router(state);
     let request = Request::builder()
-        .uri("/passkeys/manage")
+        .uri("/account")
         .header("Cookie", session_value)
         .body(Body::empty())
         .unwrap();
@@ -381,7 +392,7 @@ async fn test_no_session_returns_unauthorized() {
 
     // Access protected route without session
     let request = Request::builder()
-        .uri("/passkeys/manage")
+        .uri("/account")
         .body(Body::empty())
         .unwrap();
 
@@ -437,13 +448,327 @@ async fn test_logout_invalidates_session() {
     // Session should now be invalid
     let app = test_router(state);
     let request = Request::builder()
-        .uri("/passkeys/manage")
+        .uri("/account")
         .header("Cookie", session_value)
         .body(Body::empty())
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_revoke_other_sessions_keeps_current_session() {
+    let state = test_state();
+
+    // Signup creates initial session.
+    let app = test_router(state.clone());
+    let signup_request = Request::builder()
+        .method("POST")
+        .uri("/signup")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", CSRF_COOKIE)
+        .header("X-Forwarded-For", "1.2.3.4")
+        .body(Body::from(form_body(
+            "multisession@example.com",
+            "StrongP@ss123",
+        )))
+        .unwrap();
+    let signup_response = app.oneshot(signup_request).await.unwrap();
+    let signup_cookie = extract_session_cookie(
+        signup_response
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+    );
+
+    // Login creates a second session that will become current.
+    let app = test_router(state.clone());
+    let login_request = Request::builder()
+        .method("POST")
+        .uri("/login")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", CSRF_COOKIE)
+        .header("X-Forwarded-For", "1.2.3.4")
+        .body(Body::from(form_body(
+            "multisession@example.com",
+            "StrongP@ss123",
+        )))
+        .unwrap();
+    let login_response = app.oneshot(login_request).await.unwrap();
+    let current_cookie = extract_session_cookie(
+        login_response
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+    );
+
+    // Revoke all other sessions from current session.
+    let app = test_router(state.clone());
+    let revoke_request = Request::builder()
+        .method("POST")
+        .uri("/account/sessions/revoke-others")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", format!("{current_cookie}; {CSRF_COOKIE}"))
+        .body(Body::from(format!("csrf_token={}", CSRF_TOKEN)))
+        .unwrap();
+    let revoke_response = app.oneshot(revoke_request).await.unwrap();
+    assert_eq!(revoke_response.status(), StatusCode::SEE_OTHER);
+
+    // Original session should be invalid now.
+    let app = test_router(state.clone());
+    let old_session_request = Request::builder()
+        .uri("/account")
+        .header("Cookie", signup_cookie)
+        .body(Body::empty())
+        .unwrap();
+    let old_session_response = app.oneshot(old_session_request).await.unwrap();
+    assert_eq!(old_session_response.status(), StatusCode::UNAUTHORIZED);
+
+    // Current session remains valid.
+    let app = test_router(state);
+    let current_request = Request::builder()
+        .uri("/account")
+        .header("Cookie", current_cookie)
+        .body(Body::empty())
+        .unwrap();
+    let current_response = app.oneshot(current_request).await.unwrap();
+    assert_eq!(current_response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_revoke_single_session_by_id() {
+    let state = test_state();
+
+    // Signup creates initial session.
+    let app = test_router(state.clone());
+    let signup_request = Request::builder()
+        .method("POST")
+        .uri("/signup")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", CSRF_COOKIE)
+        .header("X-Forwarded-For", "1.2.3.4")
+        .body(Body::from(form_body(
+            "single-revoke@example.com",
+            "StrongP@ss123",
+        )))
+        .unwrap();
+    let signup_response = app.oneshot(signup_request).await.unwrap();
+    let old_cookie = extract_session_cookie(
+        signup_response
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+    );
+    let old_session_id = session_id_from_cookie(&old_cookie);
+
+    // Login creates the current session.
+    let app = test_router(state.clone());
+    let login_request = Request::builder()
+        .method("POST")
+        .uri("/login")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", CSRF_COOKIE)
+        .header("X-Forwarded-For", "1.2.3.4")
+        .body(Body::from(form_body(
+            "single-revoke@example.com",
+            "StrongP@ss123",
+        )))
+        .unwrap();
+    let login_response = app.oneshot(login_request).await.unwrap();
+    let current_cookie = extract_session_cookie(
+        login_response
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+    );
+
+    // Revoke old session by id.
+    let app = test_router(state.clone());
+    let revoke_request = Request::builder()
+        .method("POST")
+        .uri("/account/sessions/revoke")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", format!("{current_cookie}; {CSRF_COOKIE}"))
+        .body(Body::from(format!(
+            "session_id={}&csrf_token={}",
+            urlencoding::encode(&old_session_id),
+            CSRF_TOKEN
+        )))
+        .unwrap();
+    let revoke_response = app.oneshot(revoke_request).await.unwrap();
+    assert_eq!(revoke_response.status(), StatusCode::SEE_OTHER);
+
+    // Revoked session should no longer be usable.
+    let app = test_router(state.clone());
+    let old_request = Request::builder()
+        .uri("/account")
+        .header("Cookie", old_cookie)
+        .body(Body::empty())
+        .unwrap();
+    let old_response = app.oneshot(old_request).await.unwrap();
+    assert_eq!(old_response.status(), StatusCode::UNAUTHORIZED);
+
+    // Current session remains valid.
+    let app = test_router(state);
+    let current_request = Request::builder()
+        .uri("/account")
+        .header("Cookie", current_cookie)
+        .body(Body::empty())
+        .unwrap();
+    let current_response = app.oneshot(current_request).await.unwrap();
+    assert_eq!(current_response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_change_password_invalidates_old_password_login() {
+    let state = test_state();
+
+    // Signup first user and get a session.
+    let app = test_router(state.clone());
+    let signup_request = Request::builder()
+        .method("POST")
+        .uri("/signup")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", CSRF_COOKIE)
+        .header("X-Forwarded-For", "1.2.3.4")
+        .body(Body::from(form_body(
+            "password-change@example.com",
+            "StrongP@ss123",
+        )))
+        .unwrap();
+    let signup_response = app.oneshot(signup_request).await.unwrap();
+    let current_cookie = extract_session_cookie(
+        signup_response
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+    );
+
+    // Change password while authenticated.
+    let app = test_router(state.clone());
+    let change_password_body = format!(
+        "current_password={}&new_password={}&confirm_password={}&csrf_token={}",
+        urlencoding::encode("StrongP@ss123"),
+        urlencoding::encode("NewStrongP@ss456!"),
+        urlencoding::encode("NewStrongP@ss456!"),
+        CSRF_TOKEN,
+    );
+    let change_password_request = Request::builder()
+        .method("POST")
+        .uri("/account/password")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", format!("{current_cookie}; {CSRF_COOKIE}"))
+        .body(Body::from(change_password_body))
+        .unwrap();
+    let change_password_response = app.oneshot(change_password_request).await.unwrap();
+    assert_eq!(change_password_response.status(), StatusCode::SEE_OTHER);
+
+    // Old password should fail.
+    let app = test_router(state.clone());
+    let old_login_request = Request::builder()
+        .method("POST")
+        .uri("/login")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", CSRF_COOKIE)
+        .header("X-Forwarded-For", "1.2.3.4")
+        .body(Body::from(form_body(
+            "password-change@example.com",
+            "StrongP@ss123",
+        )))
+        .unwrap();
+    let old_login_response = app.oneshot(old_login_request).await.unwrap();
+    assert_eq!(old_login_response.status(), StatusCode::SEE_OTHER);
+    let old_login_location = old_login_response
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(old_login_location.contains("error="));
+
+    // New password should succeed.
+    let app = test_router(state);
+    let new_login_request = Request::builder()
+        .method("POST")
+        .uri("/login")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", CSRF_COOKIE)
+        .header("X-Forwarded-For", "1.2.3.4")
+        .body(Body::from(form_body(
+            "password-change@example.com",
+            "NewStrongP@ss456!",
+        )))
+        .unwrap();
+    let new_login_response = app.oneshot(new_login_request).await.unwrap();
+    assert_eq!(new_login_response.status(), StatusCode::SEE_OTHER);
+}
+
+#[tokio::test]
+async fn test_regenerate_recovery_codes_updates_stored_codes() {
+    let state = test_state();
+
+    // Signup first user and get a session.
+    let app = test_router(state.clone());
+    let signup_request = Request::builder()
+        .method("POST")
+        .uri("/signup")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", CSRF_COOKIE)
+        .header("X-Forwarded-For", "1.2.3.4")
+        .body(Body::from(form_body(
+            "recovery-rotate@example.com",
+            "StrongP@ss123",
+        )))
+        .unwrap();
+    let signup_response = app.oneshot(signup_request).await.unwrap();
+    let current_cookie = extract_session_cookie(
+        signup_response
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+    );
+    let user_before = state
+        .db
+        .get_user_by_email("recovery-rotate@example.com".to_string())
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Regenerate recovery codes.
+    let app = test_router(state.clone());
+    let regenerate_request = Request::builder()
+        .method("POST")
+        .uri("/account/recovery-codes/regenerate")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", format!("{current_cookie}; {CSRF_COOKIE}"))
+        .body(Body::from(format!("csrf_token={}", CSRF_TOKEN)))
+        .unwrap();
+    let regenerate_response = app.oneshot(regenerate_request).await.unwrap();
+    assert_eq!(regenerate_response.status(), StatusCode::OK);
+
+    // Stored hashed codes should have changed and still contain expected number.
+    let user_after = state
+        .db
+        .get_user_by_email("recovery-rotate@example.com".to_string())
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(user_after.recovery_codes.len(), 8);
+    assert_ne!(user_before.recovery_codes, user_after.recovery_codes);
 }
 
 // --- Refresh token rotation ---

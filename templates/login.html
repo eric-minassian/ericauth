@@ -147,7 +147,7 @@
             if (oauthParams.get('client_id') && oauthParams.get('redirect_uri')) {
                 window.location.href = '/authorize?' + oauthParams.toString();
             } else {
-                window.location.href = '/passkeys/manage';
+                window.location.href = '/account';
             }
         } catch (e) {
             errEl.textContent = e.message || 'Passkey authentication failed';

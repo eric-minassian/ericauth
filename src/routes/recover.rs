@@ -103,10 +103,21 @@ async fn try_recover(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("unknown")
         .to_string();
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(ToString::to_string);
 
     // Create session
     let session_token = generate_session_token()?;
-    let session = create_session(&state.db, session_token.clone(), user.id, client_ip).await?;
+    let session = create_session(
+        &state.db,
+        session_token.clone(),
+        user.id,
+        client_ip,
+        user_agent,
+    )
+    .await?;
 
     // Build response with session cookie
     let (cookie_name, cookie_value) = session_cookie(&session_token, session.expires_at);
@@ -118,6 +129,6 @@ async fn try_recover(
             .map_err(|e| AuthError::Internal(format!("Failed to build cookie header: {e}")))?,
     );
 
-    // Redirect to passkeys management page
-    Ok((response_headers, Redirect::to("/passkeys/manage")).into_response())
+    // Redirect to account management page
+    Ok((response_headers, Redirect::to("/account")).into_response())
 }

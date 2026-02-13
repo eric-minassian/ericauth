@@ -157,4 +157,47 @@ impl DynamoDb {
 
         Ok(())
     }
+
+    pub async fn replace_recovery_codes(
+        &self,
+        user_id: &str,
+        recovery_codes: Vec<String>,
+        updated_at: &str,
+    ) -> Result<(), AuthError> {
+        let codes_av = serde_dynamo::aws_sdk_dynamodb_1::to_attribute_value(&recovery_codes)
+            .map_err(|e| AuthError::Internal(format!("Failed to serialize recovery codes: {e}")))?;
+
+        self.client
+            .update_item()
+            .table_name(&self.users_table)
+            .key("id", AttributeValue::S(user_id.to_string()))
+            .update_expression("SET recovery_codes = :codes, updated_at = :updated_at")
+            .expression_attribute_values(":codes", codes_av)
+            .expression_attribute_values(":updated_at", AttributeValue::S(updated_at.to_string()))
+            .send()
+            .await
+            .map_err(|e| AuthError::Internal(format!("Failed to replace recovery codes: {e}")))?;
+
+        Ok(())
+    }
+
+    pub async fn update_password_hash(
+        &self,
+        user_id: &str,
+        password_hash: String,
+        updated_at: &str,
+    ) -> Result<(), AuthError> {
+        self.client
+            .update_item()
+            .table_name(&self.users_table)
+            .key("id", AttributeValue::S(user_id.to_string()))
+            .update_expression("SET password_hash = :password_hash, updated_at = :updated_at")
+            .expression_attribute_values(":password_hash", AttributeValue::S(password_hash))
+            .expression_attribute_values(":updated_at", AttributeValue::S(updated_at.to_string()))
+            .send()
+            .await
+            .map_err(|e| AuthError::Internal(format!("Failed to update password hash: {e}")))?;
+
+        Ok(())
+    }
 }

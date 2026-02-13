@@ -39,6 +39,14 @@ where
 
         let session = state.db.get_session_by_token(token).await?;
 
+        if let Err(err) = state
+            .db
+            .update_session_last_seen(&session.id, chrono::Utc::now().timestamp())
+            .await
+        {
+            tracing::warn!("failed to update session last_seen_at: {err}");
+        }
+
         Ok(AuthenticatedUser {
             user_id: session.user_id,
             session_id: session.id,

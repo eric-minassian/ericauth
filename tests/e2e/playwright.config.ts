@@ -2,6 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 const baseURL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:9000';
 const useLocalWebServer = !process.env.E2E_BASE_URL;
+const localWebServerCommand =
+  process.env.E2E_WEB_SERVER_CMD ??
+  'ENCRYPTION_KEY=01234567890123456789012345678901 DATABASE_BACKEND=memory cargo lambda watch --ignore-changes --invoke-address 127.0.0.1 --invoke-port 9000';
 
 export default defineConfig({
   testDir: '.',
@@ -28,7 +31,7 @@ export default defineConfig({
   webServer: useLocalWebServer
     ? {
         command:
-          'ENCRYPTION_KEY=01234567890123456789012345678901 DATABASE_BACKEND=memory cargo lambda watch --ignore-changes --invoke-address 127.0.0.1 --invoke-port 9000',
+          localWebServerCommand,
         cwd: '../..',
         url: 'http://127.0.0.1:9000/health',
         reuseExistingServer: !process.env.CI,

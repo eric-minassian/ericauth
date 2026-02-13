@@ -27,6 +27,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.93.1
           components: clippy
 
       - name: Cache cargo registry & build
@@ -48,6 +49,9 @@ jobs:
         env:
           ENCRYPTION_KEY: "01234567890123456789012345678901"
 
+      - name: Build app binary for E2E cache reuse
+        run: cargo build --all-features
+
   e2e:
     name: E2E (Playwright)
     needs: test
@@ -57,6 +61,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.1
 
       - name: Install cargo-lambda
         run: pip install cargo-lambda
@@ -68,9 +74,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-e2e-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-e2e-
+            ${{ runner.os }}-cargo-
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -93,7 +99,7 @@ jobs:
         working-directory: tests/e2e
 
       - name: Run E2E tests
-        run: pnpm test
+        run: pnpm test -- --forbid-only
         working-directory: tests/e2e
 
       - name: Upload Playwright artifacts on failure
@@ -124,6 +130,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.1
 
       - name: Install cargo-lambda
         run: pip install cargo-lambda
@@ -199,7 +207,7 @@ jobs:
         working-directory: tests/e2e
 
       - name: Run E2E tests against Beta
-        run: pnpm test
+        run: pnpm test -- --forbid-only
         working-directory: tests/e2e
 
       - name: Upload Playwright artifacts on failure
@@ -230,6 +238,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.93.1
 
       - name: Install cargo-lambda
         run: pip install cargo-lambda
@@ -305,7 +315,7 @@ jobs:
         working-directory: tests/e2e
 
       - name: Run smoke tests against Prod
-        run: pnpm test -- --grep @smoke
+        run: pnpm test -- --forbid-only --grep @smoke
         working-directory: tests/e2e
 
       - name: Upload Playwright artifacts on failure

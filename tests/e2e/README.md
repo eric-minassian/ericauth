@@ -34,3 +34,4 @@ Avoid CSS/XPath selectors unless absolutely necessary.
 
 - Set `E2E_BASE_URL` to run tests against a deployed stack (beta/prod) instead of local `cargo lambda watch`.
 - Example: `E2E_BASE_URL=https://example.execute-api.us-east-1.amazonaws.com pnpm test`.
+- Set `E2E_WEB_SERVER_CMD` to override the local web server command used by Playwright.

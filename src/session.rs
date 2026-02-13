@@ -3,7 +3,10 @@ use chrono::{DateTime, Utc};
 use sha2::{digest::Update, Digest, Sha256};
 use uuid::Uuid;
 
-use crate::{db::Database, error::AuthError};
+use crate::{
+    db::{session::NewSession, Database},
+    error::AuthError,
+};
 
 pub struct Session {
     pub id: String,
@@ -25,11 +28,17 @@ pub async fn create_session(
     token: String,
     user_id: Uuid,
     ip_address: String,
+    user_agent: Option<String>,
 ) -> Result<Session, AuthError> {
     let hasher = Sha256::new();
     let session_id = hex::encode(hasher.chain(token.as_bytes()).finalize());
 
     let expires_at = (Utc::now() + chrono::Duration::days(30)).timestamp();
+    let created_at = Utc::now().timestamp();
+    let normalized_user_agent = user_agent
+        .map(|ua| ua.trim().to_string())
+        .filter(|ua| !ua.is_empty())
+        .map(|ua| ua.chars().take(256).collect::<String>());
 
     let session = Session {
         id: session_id.clone(),
@@ -37,8 +46,16 @@ pub async fn create_session(
         expires_at,
     };
 
-    db.insert_session(session_id, user_id, expires_at, ip_address)
-        .await?;
+    db.insert_session(NewSession {
+        id: session_id,
+        user_id,
+        expires_at,
+        ip_address,
+        created_at,
+        last_seen_at: created_at,
+        user_agent: normalized_user_agent,
+    })
+    .await?;
 
     Ok(session)
 }

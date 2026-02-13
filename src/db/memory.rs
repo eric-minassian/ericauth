@@ -9,6 +9,7 @@ use super::auth_code::AuthCodeTable;
 use super::client::ClientTable;
 use super::credential::CredentialTable;
 use super::refresh_token::RefreshTokenTable;
+use super::session::NewSession;
 use super::session::SessionTable;
 use super::user::UserTable;
 
@@ -154,25 +155,70 @@ impl MemoryDb {
         Ok(())
     }
 
-    pub async fn insert_session(
+    pub async fn replace_recovery_codes(
         &self,
-        id: String,
-        user_id: Uuid,
-        expires_at: i64,
-        ip_address: String,
+        user_id: &str,
+        recovery_codes: Vec<String>,
+        updated_at: &str,
     ) -> Result<(), AuthError> {
+        let user_uuid = Uuid::parse_str(user_id)
+            .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
+
+        let mut users = self
+            .users
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        let user = users
+            .get_mut(&user_uuid)
+            .ok_or_else(|| AuthError::NotFound("user not found".to_string()))?;
+
+        user.recovery_codes = recovery_codes;
+        user.updated_at = updated_at.to_string();
+
+        Ok(())
+    }
+
+    pub async fn update_password_hash(
+        &self,
+        user_id: &str,
+        password_hash: String,
+        updated_at: &str,
+    ) -> Result<(), AuthError> {
+        let user_uuid = Uuid::parse_str(user_id)
+            .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
+
+        let mut users = self
+            .users
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        let user = users
+            .get_mut(&user_uuid)
+            .ok_or_else(|| AuthError::NotFound("user not found".to_string()))?;
+
+        user.password_hash = Some(password_hash);
+        user.updated_at = updated_at.to_string();
+
+        Ok(())
+    }
+
+    pub async fn insert_session(&self, new_session: NewSession) -> Result<(), AuthError> {
         let session = SessionTable {
-            id: id.clone(),
-            user_id,
-            expires_at,
-            ip_address,
+            id: new_session.id.clone(),
+            user_id: new_session.user_id,
+            expires_at: new_session.expires_at,
+            ip_address: new_session.ip_address,
+            created_at: new_session.created_at,
+            last_seen_at: new_session.last_seen_at,
+            user_agent: new_session.user_agent,
         };
 
         let mut sessions = self
             .sessions
             .write()
             .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
-        sessions.insert(id, session);
+        sessions.insert(new_session.id, session);
 
         Ok(())
     }
@@ -193,6 +239,42 @@ impl MemoryDb {
             .read()
             .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
         Ok(sessions.get(id).cloned())
+    }
+
+    pub async fn get_sessions_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<SessionTable>, AuthError> {
+        let user_uuid = Uuid::parse_str(user_id)
+            .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
+
+        let sessions = self
+            .sessions
+            .read()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        Ok(sessions
+            .values()
+            .filter(|session| session.user_id == user_uuid)
+            .cloned()
+            .collect())
+    }
+
+    pub async fn update_session_last_seen(
+        &self,
+        id: &str,
+        last_seen_at: i64,
+    ) -> Result<(), AuthError> {
+        let mut sessions = self
+            .sessions
+            .write()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        if let Some(session) = sessions.get_mut(id) {
+            session.last_seen_at = last_seen_at;
+        }
+
+        Ok(())
     }
 
     pub async fn insert_refresh_token(&self, token: &RefreshTokenTable) -> Result<(), AuthError> {

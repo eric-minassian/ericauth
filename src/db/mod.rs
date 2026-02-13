@@ -18,13 +18,14 @@ use self::auth_code::AuthCodeTable;
 use self::client::ClientTable;
 use self::credential::CredentialTable;
 use self::refresh_token::RefreshTokenTable;
+use self::session::NewSession;
 use self::user::UserTable;
 
 /// Database abstraction that can be backed by DynamoDB (production) or
 /// an in-memory store (local dev / tests).
 #[derive(Clone)]
 pub enum Database {
-    Dynamo(DynamoDb),
+    Dynamo(Box<DynamoDb>),
     Memory(memory::MemoryDb),
 }
 
@@ -35,6 +36,7 @@ pub struct DynamoDb {
     pub users_table: String,
     pub users_email_index: String,
     pub sessions_table: String,
+    pub sessions_user_id_index: String,
     pub refresh_tokens_table: String,
     pub credentials_table: String,
     pub credentials_user_id_index: String,
@@ -49,13 +51,15 @@ impl Database {
     pub async fn dynamo() -> Self {
         let config = aws_config::load_from_env().await;
         let client = aws_sdk_dynamodb::Client::new(&config);
-        Database::Dynamo(DynamoDb {
+        Database::Dynamo(Box::new(DynamoDb {
             client,
             users_table: env::var("USERS_TABLE_NAME").unwrap_or_else(|_| "UsersTable".to_string()),
             users_email_index: env::var("USERS_TABLE_EMAIL_INDEX_NAME")
                 .unwrap_or_else(|_| "emailIndex".to_string()),
             sessions_table: env::var("SESSIONS_TABLE_NAME")
                 .unwrap_or_else(|_| "SessionsTable".to_string()),
+            sessions_user_id_index: env::var("SESSIONS_USER_ID_INDEX_NAME")
+                .unwrap_or_else(|_| "userIdIndex".to_string()),
             refresh_tokens_table: env::var("REFRESH_TOKENS_TABLE_NAME")
                 .unwrap_or_else(|_| "RefreshTokensTable".to_string()),
             credentials_table: env::var("CREDENTIALS_TABLE_NAME")
@@ -70,7 +74,7 @@ impl Database {
                 .unwrap_or_else(|_| "AuthCodesTable".to_string()),
             rate_limits_table: env::var("RATE_LIMITS_TABLE_NAME")
                 .unwrap_or_else(|_| "RateLimitsTable".to_string()),
-        })
+        }))
     }
 
     /// Create an in-memory database for local development and testing.
@@ -149,16 +153,46 @@ impl Database {
         }
     }
 
-    pub async fn insert_session(
+    pub async fn replace_recovery_codes(
         &self,
-        id: String,
-        user_id: Uuid,
-        expires_at: i64,
-        ip_address: String,
+        user_id: &str,
+        recovery_codes: Vec<String>,
+        updated_at: &str,
     ) -> Result<(), AuthError> {
         match self {
-            Database::Dynamo(db) => db.insert_session(id, user_id, expires_at, ip_address).await,
-            Database::Memory(db) => db.insert_session(id, user_id, expires_at, ip_address).await,
+            Database::Dynamo(db) => {
+                db.replace_recovery_codes(user_id, recovery_codes, updated_at)
+                    .await
+            }
+            Database::Memory(db) => {
+                db.replace_recovery_codes(user_id, recovery_codes, updated_at)
+                    .await
+            }
+        }
+    }
+
+    pub async fn update_password_hash(
+        &self,
+        user_id: &str,
+        password_hash: String,
+        updated_at: &str,
+    ) -> Result<(), AuthError> {
+        match self {
+            Database::Dynamo(db) => {
+                db.update_password_hash(user_id, password_hash, updated_at)
+                    .await
+            }
+            Database::Memory(db) => {
+                db.update_password_hash(user_id, password_hash, updated_at)
+                    .await
+            }
+        }
+    }
+
+    pub async fn insert_session(&self, new_session: NewSession) -> Result<(), AuthError> {
+        match self {
+            Database::Dynamo(db) => db.insert_session(new_session.clone()).await,
+            Database::Memory(db) => db.insert_session(new_session).await,
         }
     }
 
@@ -189,6 +223,27 @@ impl Database {
         }
 
         Ok(session)
+    }
+
+    pub async fn get_sessions_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<session::SessionTable>, AuthError> {
+        match self {
+            Database::Dynamo(db) => db.get_sessions_by_user_id(user_id).await,
+            Database::Memory(db) => db.get_sessions_by_user_id(user_id).await,
+        }
+    }
+
+    pub async fn update_session_last_seen(
+        &self,
+        session_id: &str,
+        last_seen_at: i64,
+    ) -> Result<(), AuthError> {
+        match self {
+            Database::Dynamo(db) => db.update_session_last_seen(session_id, last_seen_at).await,
+            Database::Memory(db) => db.update_session_last_seen(session_id, last_seen_at).await,
+        }
     }
 
     pub async fn insert_refresh_token(&self, token: &RefreshTokenTable) -> Result<(), AuthError> {

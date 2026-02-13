@@ -1,3 +1,4 @@
+export { AccountPage } from './account.page';
 export { LoginPage } from './login.page';
 export { PasskeysPage } from './passkeys.page';
 export { RecoverPage } from './recover.page';

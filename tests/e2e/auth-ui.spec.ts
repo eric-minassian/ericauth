@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 import {
+  AccountPage,
   LoginPage,
-  PasskeysPage,
   RecoverPage,
   RecoveryCodesPage,
   SignupPage,
@@ -10,6 +10,14 @@ import {
 import { uniqueEmail } from './utils/test-data';
 
 test.describe('Auth UI', () => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    const titleSeed = Array.from(testInfo.title).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+    const octet = 10 + (titleSeed % 200);
+    await page.setExtraHTTPHeaders({
+      'X-Forwarded-For': `198.51.100.${octet}`,
+    });
+  });
+
   test('renders core auth pages @smoke', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const signupPage = new SignupPage(page);
@@ -41,10 +49,10 @@ test.describe('Auth UI', () => {
     await expect(signupPage.emailInput).toHaveValue(email);
   });
 
-  test('signup and password login flow reaches passkeys page', async ({ page }) => {
+  test('signup and password login flow reaches account page', async ({ page }) => {
     const signupPage = new SignupPage(page);
     const recoveryCodesPage = new RecoveryCodesPage(page);
-    const passkeysPage = new PasskeysPage(page);
+    const accountPage = new AccountPage(page);
     const loginPage = new LoginPage(page);
 
     const email = uniqueEmail('happy');
@@ -54,14 +62,14 @@ test.describe('Auth UI', () => {
     await signupPage.signup(email, password);
 
     await recoveryCodesPage.expectLoaded();
-    await recoveryCodesPage.continueToPasskeys();
-    await passkeysPage.expectLoaded();
+    await recoveryCodesPage.continueToAccount();
+    await accountPage.expectLoaded();
 
-    await passkeysPage.logout();
+    await accountPage.logout();
     await expect(page).toHaveURL('/login');
 
     await loginPage.loginWithPassword(email, password);
-    await passkeysPage.expectLoaded();
+    await accountPage.expectLoaded();
   });
 
   test('failed login keeps submitted email', async ({ page }) => {

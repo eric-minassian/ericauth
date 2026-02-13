@@ -15,7 +15,7 @@ export class RecoveryCodesPage {
     await expect(this.heading).toBeVisible();
   }
 
-  async continueToPasskeys(): Promise<void> {
+  async continueToAccount(): Promise<void> {
     await this.continueLink.click();
   }
 }

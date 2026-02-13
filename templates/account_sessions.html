@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Sessions - EricAuth{% endblock %}
+
+{% block content %}
+<h1>Session Management</h1>
+
+{% if let Some(msg) = notice %}
+<div class="success-msg">{{ msg }}</div>
+{% endif %}
+{% if let Some(msg) = error %}
+<div class="error-msg">{{ msg }}</div>
+{% endif %}
+
+<form method="POST" action="/account/sessions/revoke-others">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-secondary">Sign Out Other Devices</button>
+</form>
+
+<div style="margin-top: 0.9rem; display: grid; gap: 0.75rem;">
+    {% for session in &sessions %}
+    <div style="border: 1px solid #27272a; border-radius: 6px; padding: 0.75rem;">
+        <p style="font-weight: 600; margin-bottom: 0.4rem;">{{ session.device_name }} {% if session.is_current %}(Current){% endif %}</p>
+        <p style="font-size: 0.82rem; color: #a1a1aa; margin-bottom: 0.2rem;">IP: {{ session.ip_address }}</p>
+        <p style="font-size: 0.82rem; color: #a1a1aa; margin-bottom: 0.2rem;">Started: {{ session.created_at }}</p>
+        <p style="font-size: 0.82rem; color: #a1a1aa; margin-bottom: 0.2rem;">Last active: {{ session.last_seen_at }}</p>
+        <p style="font-size: 0.82rem; color: #a1a1aa;">Expires: {{ session.expires_at }}</p>
+
+        {% if !session.is_current %}
+        <form method="POST" action="/account/sessions/revoke">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="session_id" value="{{ session.id }}">
+            <button type="submit" class="btn btn-danger">Sign Out This Device</button>
+        </form>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<div class="link-row"><a href="/account">Back to account</a></div>
+{% endblock %}

@@ -1,3 +1,4 @@
+mod account;
 pub(crate) mod authorize;
 mod consent;
 mod favicon;
@@ -83,6 +84,24 @@ pub fn router(state: AppState) -> Router {
             get(consent::get_handler).post(consent::post_handler),
         )
         .route("/passkeys/manage", get(passkeys_page::handler))
+        .route("/account", get(account::handler))
+        .route("/account/sessions", get(account::sessions_page_handler))
+        .route(
+            "/account/sessions/revoke",
+            post(account::revoke_session_handler),
+        )
+        .route(
+            "/account/sessions/revoke-others",
+            post(account::revoke_other_sessions_handler),
+        )
+        .route(
+            "/account/password",
+            get(account::password_page_handler).post(account::change_password_handler),
+        )
+        .route(
+            "/account/recovery-codes/regenerate",
+            post(account::regenerate_recovery_codes_handler),
+        )
         .route("/passkeys/register/begin", post(passkey::register_begin))
         .route(
             "/passkeys/register/complete",

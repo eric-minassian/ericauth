@@ -12,7 +12,7 @@ use crate::{
     middleware::{auth::AuthenticatedUser, csrf::CsrfToken},
     password::{hash_password, verify_password_hash, verify_password_strength},
     state::AppState,
-    templates::render,
+    templates::{render, RecoveryCodesTemplate},
     user::generate_recovery_codes,
 };
 
@@ -61,12 +61,6 @@ struct AccountPasswordTemplate {
     has_password_login: bool,
     notice: Option<String>,
     error: Option<String>,
-}
-
-#[derive(Template)]
-#[template(path = "recovery_codes.html")]
-struct RecoveryCodesTemplate {
-    recovery_codes: Vec<String>,
 }
 
 #[derive(Deserialize)]

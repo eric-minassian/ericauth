@@ -37,7 +37,7 @@ where
             return Err(AuthError::Unauthorized("missing session cookie".into()));
         }
 
-        let session = state.db.get_session_by_token(token).await?;
+        let session = crate::db::get_session_by_token(&*state.db, token).await?;
 
         if let Err(err) = state
             .db

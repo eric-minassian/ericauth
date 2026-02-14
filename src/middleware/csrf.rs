@@ -77,9 +77,16 @@ async fn handle_get(mut request: Request, next: Next) -> Result<Response, Respon
     let mut response = next.run(request).await;
 
     let cookie = format!("__csrf={token}; Path=/; SameSite=Strict; Secure; HttpOnly");
-    response
-        .headers_mut()
-        .insert(axum::http::header::SET_COOKIE, cookie.parse().unwrap());
+    response.headers_mut().insert(
+        axum::http::header::SET_COOKIE,
+        cookie.parse().map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to build CSRF cookie",
+            )
+                .into_response()
+        })?,
+    );
 
     Ok(response)
 }

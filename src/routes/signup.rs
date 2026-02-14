@@ -1,4 +1,3 @@
-use askama::Template;
 use axum::{
     extract::State,
     http::HeaderMap,
@@ -9,10 +8,11 @@ use serde::Deserialize;
 
 use crate::{
     error::AuthError,
+    oauth::build_oauth_qs,
     password::verify_password_strength,
     session::{create_session, generate_session_token, session_cookie},
     state::AppState,
-    templates::render,
+    templates::{render, RecoveryCodesTemplate},
     user::create_user,
     validation::{normalize_email, verify_email},
 };
@@ -30,12 +30,6 @@ pub struct SignupPayload {
     code_challenge: Option<String>,
     code_challenge_method: Option<String>,
     nonce: Option<String>,
-}
-
-#[derive(Template)]
-#[template(path = "recovery_codes.html")]
-struct RecoveryCodesTemplate {
-    recovery_codes: Vec<String>,
 }
 
 pub async fn handler(
@@ -81,16 +75,6 @@ pub async fn handler(
             Redirect::to(&redirect_url).into_response()
         }
     }
-}
-
-fn build_oauth_qs(params: &[(&str, &Option<String>)]) -> String {
-    let mut parts: Vec<String> = Vec::new();
-    for &(key, value) in params {
-        if let Some(v) = value {
-            parts.push(format!("{}={}", key, urlencoding::encode(v)));
-        }
-    }
-    parts.join("&")
 }
 
 async fn try_signup(
@@ -141,12 +125,12 @@ async fn try_signup(
     }
 
     // Create user and session
-    let user = create_user(&state.db, normalized_email, body.password).await?;
+    let user = create_user(state.db.as_ref(), normalized_email, body.password).await?;
 
     let session_token = generate_session_token()?;
 
     let session = create_session(
-        &state.db,
+        state.db.as_ref(),
         session_token.clone(),
         user.id,
         client_ip.to_string(),

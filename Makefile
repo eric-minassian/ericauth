@@ -2,7 +2,11 @@
 
 ## Run the Lambda locally with in-memory database (no AWS needed)
 dev:
-	DATABASE_BACKEND=memory MEMORY_DB_FILE=.ericauth-dev-db.json WEBAUTHN_RP_ID=localhost WEBAUTHN_RP_ORIGIN=http://localhost:9000 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:9000 cargo lambda watch
+	DATABASE_BACKEND=memory MEMORY_DB_FILE=.ericauth-dev-db.json \
+	WEBAUTHN_RP_ID=localhost WEBAUTHN_RP_ORIGIN=http://localhost:9000 \
+	CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:9000 \
+	ISSUER_URL=http://localhost:9000 \
+	cargo lambda watch
 
 ## Reset local dev database snapshot
 dev-reset-db:
@@ -10,12 +14,12 @@ dev-reset-db:
 
 ## Run cargo tests
 test:
-	ENCRYPTION_KEY="01234567890123456789012345678901" cargo test --all-features
+	ENCRYPTION_KEY="01234567890123456789012345678901" cargo nextest run --all-features
 
 ## Check formatting + clippy
 lint:
 	cargo fmt --all -- --check
-	cargo clippy --all-targets --all-features
+	cargo clippy --all-targets --all-features --no-deps -- -D warnings
 
 ## Run browser end-to-end tests
 e2e:
@@ -24,6 +28,14 @@ e2e:
 ## Format code
 fmt:
 	cargo fmt --all
+
+## Type-check without building
+check:
+	cargo check --all-features
+
+## Remove build artifacts
+clean:
+	cargo clean
 
 # ─── Build ──────────────────────────────────────────────────────────
 
@@ -66,4 +78,4 @@ synth:
 login:
 	aws sso login --sso-session ericminassian
 
-.PHONY: dev dev-reset-db test lint e2e fmt build build-release deploy-dev deploy-beta deploy-prod deploy-oidc-beta deploy-oidc-prod synth login
+.PHONY: dev dev-reset-db test lint e2e fmt check clean build build-release deploy-dev deploy-beta deploy-prod deploy-oidc-beta deploy-oidc-prod synth login

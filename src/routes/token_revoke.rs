@@ -37,13 +37,14 @@ mod tests {
     };
     use lambda_http::tower::ServiceExt;
 
-    use crate::{db::Database, state::AppState};
+    use crate::state::AppState;
 
     fn test_app_state() -> AppState {
         AppState {
-            db: Database::memory(),
+            db: crate::db::memory(),
             jwt_keys: None,
             webauthn: std::sync::Arc::new(crate::webauthn_config::build_webauthn().unwrap()),
+            issuer_url: "https://auth.test.example.com".to_string(),
         }
     }
 

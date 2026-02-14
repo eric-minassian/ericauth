@@ -1,6 +1,7 @@
 import { RemovalPolicy } from "aws-cdk-lib";
 import { AttributeType, TableV2 } from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
+import { GSI_NAMES } from "./constants";
 
 interface DatabaseProps {
   envName: string;
@@ -20,16 +21,21 @@ export class Database extends Construct {
     super(scope, id);
 
     const prefix = `ericauth-${props.envName}`;
+    const removalPolicy =
+      props.envName === "dev"
+        ? RemovalPolicy.DESTROY
+        : RemovalPolicy.RETAIN;
 
     this.usersTable = new TableV2(this, "UsersTable", {
       tableName: `${prefix}-users`,
       partitionKey: { name: "id", type: AttributeType.STRING },
       globalSecondaryIndexes: [
         {
-          indexName: "emailIndex",
+          indexName: GSI_NAMES.EMAIL_INDEX,
           partitionKey: { name: "email", type: AttributeType.STRING },
         },
       ],
+      removalPolicy,
     });
 
     this.sessionsTable = new TableV2(this, "SessionsTable", {
@@ -37,17 +43,19 @@ export class Database extends Construct {
       partitionKey: { name: "id", type: AttributeType.STRING },
       globalSecondaryIndexes: [
         {
-          indexName: "userIdIndex",
+          indexName: GSI_NAMES.USER_ID_INDEX,
           partitionKey: { name: "user_id", type: AttributeType.STRING },
         },
       ],
       timeToLiveAttribute: "expires_at",
+      removalPolicy,
     });
 
     this.refreshTokensTable = new TableV2(this, "RefreshTokensTable", {
       tableName: `${prefix}-refresh-tokens`,
       partitionKey: { name: "token_hash", type: AttributeType.STRING },
       timeToLiveAttribute: "expires_at",
+      removalPolicy,
     });
 
     this.credentialsTable = new TableV2(this, "CredentialsTable", {
@@ -55,27 +63,31 @@ export class Database extends Construct {
       partitionKey: { name: "credential_id", type: AttributeType.STRING },
       globalSecondaryIndexes: [
         {
-          indexName: "userIdIndex",
+          indexName: GSI_NAMES.USER_ID_INDEX,
           partitionKey: { name: "user_id", type: AttributeType.STRING },
         },
       ],
+      removalPolicy,
     });
 
     this.challengesTable = new TableV2(this, "ChallengesTable", {
       tableName: `${prefix}-challenges`,
       partitionKey: { name: "challenge_id", type: AttributeType.STRING },
       timeToLiveAttribute: "expires_at",
+      removalPolicy,
     });
 
     this.clientsTable = new TableV2(this, "ClientsTable", {
       tableName: `${prefix}-clients`,
       partitionKey: { name: "client_id", type: AttributeType.STRING },
+      removalPolicy,
     });
 
     this.authCodesTable = new TableV2(this, "AuthCodesTable", {
       tableName: `${prefix}-auth-codes`,
       partitionKey: { name: "code", type: AttributeType.STRING },
       timeToLiveAttribute: "expires_at",
+      removalPolicy,
     });
 
     this.rateLimitsTable = new TableV2(this, "RateLimitsTable", {

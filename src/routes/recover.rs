@@ -111,7 +111,7 @@ async fn try_recover(
     // Create session
     let session_token = generate_session_token()?;
     let session = create_session(
-        &state.db,
+        state.db.as_ref(),
         session_token.clone(),
         user.id,
         client_ip,

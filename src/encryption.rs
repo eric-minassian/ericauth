@@ -9,28 +9,25 @@ const NONCE_LENGTH: usize = 12;
 const AUTH_TAG_LENGTH: usize = 16;
 const EXPECTED_KEY_LENGTH: usize = 32;
 
-static ENCRYPTION_KEY: OnceLock<Key<Aes256Gcm>> = OnceLock::new();
+static ENCRYPTION_KEY: OnceLock<Result<Key<Aes256Gcm>, &'static str>> = OnceLock::new();
 
-fn get_encryption_key() -> &'static Key<Aes256Gcm> {
-    ENCRYPTION_KEY.get_or_init(|| {
-        let key_str =
-            env::var("ENCRYPTION_KEY").expect("ENCRYPTION_KEY environment variable must be set");
-
-        let key_bytes = key_str.as_bytes();
-        if key_bytes.len() != EXPECTED_KEY_LENGTH {
-            panic!(
-                "ENCRYPTION_KEY must be exactly {} bytes when UTF-8 encoded, got {} bytes",
-                EXPECTED_KEY_LENGTH,
-                key_bytes.len()
-            );
-        }
-
-        Key::<Aes256Gcm>::from_slice(key_bytes).to_owned()
-    })
+fn get_encryption_key() -> Result<&'static Key<Aes256Gcm>, &'static str> {
+    ENCRYPTION_KEY
+        .get_or_init(|| {
+            let key_str = env::var("ENCRYPTION_KEY")
+                .map_err(|_| "ENCRYPTION_KEY environment variable must be set")?;
+            let key_bytes = key_str.as_bytes();
+            if key_bytes.len() != EXPECTED_KEY_LENGTH {
+                return Err("ENCRYPTION_KEY must be exactly 32 bytes");
+            }
+            Ok(Key::<Aes256Gcm>::from_slice(key_bytes).to_owned())
+        })
+        .as_ref()
+        .map_err(|&e| e)
 }
 
 pub fn encrypt(data: &[u8]) -> Result<Vec<u8>, &'static str> {
-    let key = get_encryption_key();
+    let key = get_encryption_key()?;
     let cipher = Aes256Gcm::new(key);
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
 
@@ -54,7 +51,7 @@ pub fn decrypt(encrypted: &[u8]) -> Result<Vec<u8>, &'static str> {
         return Err("encrypted data too short");
     }
 
-    let key = get_encryption_key();
+    let key = get_encryption_key()?;
     let cipher = Aes256Gcm::new(key);
 
     let nonce = Nonce::from_slice(&encrypted[..NONCE_LENGTH]);
@@ -77,7 +74,7 @@ mod tests {
 
     fn set_test_key() {
         env::set_var("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef"); // 32-byte key for AES-256
-        get_encryption_key();
+        get_encryption_key().expect("test key should be valid");
     }
 
     #[test]

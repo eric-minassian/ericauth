@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 use crate::{
     error::AuthError,
+    oauth::build_oauth_qs,
     password::verify_password_hash,
     session::{create_session, generate_session_token, session_cookie},
     state::AppState,
@@ -72,16 +73,6 @@ pub async fn handler(
             Redirect::to(&redirect_url).into_response()
         }
     }
-}
-
-fn build_oauth_qs(params: &[(&str, &Option<String>)]) -> String {
-    let mut parts: Vec<String> = Vec::new();
-    for &(key, value) in params {
-        if let Some(v) = value {
-            parts.push(format!("{}={}", key, urlencoding::encode(v)));
-        }
-    }
-    parts.join("&")
 }
 
 async fn try_login(
@@ -151,7 +142,7 @@ async fn try_login(
     let session_token = generate_session_token()?;
 
     let session = create_session(
-        &state.db,
+        state.db.as_ref(),
         session_token.clone(),
         user.id,
         client_ip.to_string(),

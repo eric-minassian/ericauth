@@ -45,7 +45,6 @@ mod tests {
     use lambda_http::tower::ServiceExt;
 
     use crate::{
-        db::Database,
         jwt::{generate_es256_keypair, AccessTokenClaims, JwtKeys},
         state::AppState,
     };
@@ -54,9 +53,10 @@ mod tests {
         let (private_pem, _) = generate_es256_keypair().unwrap();
         let jwt_keys = JwtKeys::from_pem(private_pem.as_bytes(), "test-kid").unwrap();
         AppState {
-            db: Database::memory(),
+            db: crate::db::memory(),
             jwt_keys: Some(jwt_keys),
             webauthn: std::sync::Arc::new(crate::webauthn_config::build_webauthn().unwrap()),
+            issuer_url: "https://auth.test.example.com".to_string(),
         }
     }
 
@@ -87,7 +87,7 @@ mod tests {
         let jwt_keys = state.jwt_keys.as_ref().unwrap();
         let now = chrono::Utc::now().timestamp() as usize;
         let claims = AccessTokenClaims {
-            iss: "https://auth.ericminassian.com".to_string(),
+            iss: state.issuer_url.clone(),
             sub: user_id.to_string(),
             aud: "test-client".to_string(),
             exp: now + 900,

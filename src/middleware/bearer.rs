@@ -63,7 +63,7 @@ where
         // For /userinfo, the audience is not checked strictly per OIDC spec.
         // We use an empty audience validation to allow any audience.
         let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::ES256);
-        validation.set_issuer(&["https://auth.ericminassian.com"]);
+        validation.set_issuer(&[&state.issuer_url]);
         validation.validate_aud = false;
 
         let token_data =

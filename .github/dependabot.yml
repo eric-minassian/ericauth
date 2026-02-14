@@ -5,18 +5,37 @@ updates:
     schedule:
       interval: weekly
     rebase-strategy: disabled
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
     rebase-strategy: disabled
+    groups:
+      actions:
+        patterns:
+          - "*"
   - package-ecosystem: npm
     directory: "/cdk"
     schedule:
       interval: weekly
     rebase-strategy: disabled
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: npm
     directory: "/tests/e2e"
     schedule:
       interval: weekly
     rebase-strategy: disabled
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch

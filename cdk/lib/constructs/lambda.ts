@@ -1,9 +1,11 @@
+import { Duration } from "aws-cdk-lib";
 import { TableV2 } from "aws-cdk-lib/aws-dynamodb";
 import { ISecret } from "aws-cdk-lib/aws-secretsmanager";
 import { RustFunction } from "cargo-lambda-cdk";
 import { Construct } from "constructs";
+import { GSI_NAMES } from "./constants";
 
-import path = require("path");
+import * as path from "path";
 
 const manifestPath = path.join(__dirname, "..", "..", "..");
 
@@ -17,6 +19,7 @@ interface LambdaProps {
   authCodesTable: TableV2;
   rateLimitsTable: TableV2;
   jwtSecret: ISecret;
+  issuerUrl: string;
 }
 
 export class Lambda extends Construct {
@@ -28,10 +31,12 @@ export class Lambda extends Construct {
     this.handler = new RustFunction(this, "AuthFunction", {
       manifestPath,
       binaryName: "ericauth",
+      memorySize: 512,
+      timeout: Duration.seconds(30),
       environment: {
         USERS_TABLE_NAME: props.usersTable.tableName,
         SESSIONS_TABLE_NAME: props.sessionsTable.tableName,
-        SESSIONS_USER_ID_INDEX_NAME: "userIdIndex",
+        SESSIONS_USER_ID_INDEX_NAME: GSI_NAMES.USER_ID_INDEX,
         REFRESH_TOKENS_TABLE_NAME: props.refreshTokensTable.tableName,
         CREDENTIALS_TABLE_NAME: props.credentialsTable.tableName,
         CHALLENGES_TABLE_NAME: props.challengesTable.tableName,
@@ -39,6 +44,7 @@ export class Lambda extends Construct {
         AUTH_CODES_TABLE_NAME: props.authCodesTable.tableName,
         RATE_LIMITS_TABLE_NAME: props.rateLimitsTable.tableName,
         JWT_SECRET_ARN: props.jwtSecret.secretArn,
+        ISSUER_URL: props.issuerUrl,
       },
     });
 

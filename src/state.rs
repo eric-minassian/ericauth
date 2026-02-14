@@ -3,37 +3,45 @@ use std::sync::Arc;
 
 use webauthn_rs::Webauthn;
 
-use crate::{db::Database, jwt::JwtKeys, webauthn_config::build_webauthn};
+use crate::{db::Database, error::AuthError, jwt::JwtKeys, webauthn_config::build_webauthn};
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db: Database,
+    pub db: Arc<dyn Database>,
     pub jwt_keys: Option<JwtKeys>,
     pub webauthn: Arc<Webauthn>,
+    pub issuer_url: String,
 }
 
 impl AppState {
-    pub async fn new() -> Self {
+    pub async fn new() -> Result<Self, AuthError> {
         let db = match env::var("DATABASE_BACKEND").as_deref() {
             Ok("memory") => {
                 tracing::info!("Using in-memory database backend");
-                Database::memory()
+                crate::db::memory()
             }
             _ => {
                 tracing::info!("Using DynamoDB database backend");
-                Database::dynamo().await
+                crate::db::dynamo().await
             }
         };
 
         let jwt_keys = load_jwt_keys().await;
 
-        let webauthn = Arc::new(build_webauthn().expect("Failed to initialize WebAuthn"));
+        let webauthn = Arc::new(build_webauthn().map_err(|e| {
+            tracing::error!("Failed to initialize WebAuthn: {e}");
+            e
+        })?);
 
-        Self {
+        let issuer_url =
+            env::var("ISSUER_URL").unwrap_or_else(|_| "https://auth.ericminassian.com".to_string());
+
+        Ok(Self {
             db,
             jwt_keys,
             webauthn,
-        }
+            issuer_url,
+        })
     }
 }
 

@@ -322,7 +322,7 @@ pub async fn auth_complete(
 
     let session_token = generate_session_token()?;
     let session = create_session(
-        &state.db,
+        state.db.as_ref(),
         session_token.clone(),
         user_uuid,
         client_ip,

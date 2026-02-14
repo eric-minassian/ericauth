@@ -73,7 +73,7 @@ make deploy-prod     # Deploy prod
 
 ## CI/CD Setup
 
-CI runs on PRs (lint, unit/integration tests, Playwright E2E, CDK synth). Pushes to `main` rerun tests + local Playwright E2E, deploy to beta, run Playwright E2E against beta, deploy to prod, then run prod smoke tests.
+CI runs on PRs (Rust lint + unit tests). Pushes to `main` rerun tests, run local Playwright E2E, deploy to beta, run Playwright E2E against beta, deploy to prod, then run prod smoke tests.
 
 ### AWS OIDC Setup (once per account)
 

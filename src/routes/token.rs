@@ -17,7 +17,6 @@ use crate::{
     state::AppState,
 };
 
-const ISSUER: &str = "https://auth.ericminassian.com";
 const ACCESS_TOKEN_EXPIRY_SECS: i64 = 900; // 15 minutes
 const REFRESH_TOKEN_EXPIRY_SECS: i64 = 30 * 24 * 60 * 60; // 30 days
 const ID_TOKEN_EXPIRY_SECS: i64 = 3600; // 1 hour
@@ -135,7 +134,7 @@ async fn handle_authorization_code(
 
     // Sign access token
     let access_claims = AccessTokenClaims {
-        iss: ISSUER.to_string(),
+        iss: state.issuer_url.clone(),
         sub: auth_code.user_id.clone(),
         aud: client_id.clone(),
         exp: now + ACCESS_TOKEN_EXPIRY_SECS as usize,
@@ -191,7 +190,7 @@ async fn handle_authorization_code(
     let scopes: Vec<&str> = scope.split_whitespace().collect();
     if scopes.contains(&"openid") {
         let id_claims = IdTokenClaims {
-            iss: ISSUER.to_string(),
+            iss: state.issuer_url.clone(),
             sub: auth_code.user_id,
             aud: client_id,
             exp: now + ID_TOKEN_EXPIRY_SECS as usize,
@@ -279,7 +278,7 @@ async fn handle_refresh_token(
 
     // Sign new access token
     let access_claims = AccessTokenClaims {
-        iss: ISSUER.to_string(),
+        iss: state.issuer_url.clone(),
         sub: stored_token.user_id.clone(),
         aud: stored_token.client_id.clone(),
         exp: now + ACCESS_TOKEN_EXPIRY_SECS as usize,
@@ -345,10 +344,7 @@ mod tests {
     use lambda_http::tower::ServiceExt;
 
     use crate::{
-        db::{
-            auth_code::AuthCodeTable, client::ClientTable, refresh_token::RefreshTokenTable,
-            Database,
-        },
+        db::{auth_code::AuthCodeTable, client::ClientTable, refresh_token::RefreshTokenTable},
         jwt::{generate_es256_keypair, JwtKeys},
         state::AppState,
     };
@@ -357,9 +353,10 @@ mod tests {
         let (private_pem, _) = generate_es256_keypair().unwrap();
         let jwt_keys = JwtKeys::from_pem(private_pem.as_bytes(), "test-kid").unwrap();
         AppState {
-            db: Database::memory(),
+            db: crate::db::memory(),
             jwt_keys: Some(jwt_keys),
             webauthn: std::sync::Arc::new(crate::webauthn_config::build_webauthn().unwrap()),
+            issuer_url: "https://auth.test.example.com".to_string(),
         }
     }
 
@@ -759,9 +756,10 @@ mod tests {
     #[tokio::test]
     async fn test_no_jwt_keys_configured() {
         let state = AppState {
-            db: Database::memory(),
+            db: crate::db::memory(),
             jwt_keys: None,
             webauthn: std::sync::Arc::new(crate::webauthn_config::build_webauthn().unwrap()),
+            issuer_url: "https://auth.test.example.com".to_string(),
         };
         let user_id = setup_user(&state).await;
         let raw_token = setup_refresh_token(&state, &user_id, "openid").await;

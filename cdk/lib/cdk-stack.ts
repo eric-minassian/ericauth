@@ -18,6 +18,8 @@ export interface EricAuthStackProps extends StackProps {
   domainName?: string;
   /** Root hosted zone domain for DNS validation. Required if domainName is set. */
   hostedZoneDomain?: string;
+  /** Base URL for the issuer. Defaults to https://{domainName} if set. */
+  issuerUrl?: string;
 }
 
 export class EricAuthStack extends Stack {
@@ -33,6 +35,10 @@ export class EricAuthStack extends Stack {
       description: "ES256 private key PEM for JWT signing",
     });
 
+    const issuerUrl =
+      props.issuerUrl ??
+      (props.domainName ? `https://${props.domainName}` : "");
+
     const lambda = new Lambda(this, "Lambda", {
       usersTable: database.usersTable,
       sessionsTable: database.sessionsTable,
@@ -43,6 +49,7 @@ export class EricAuthStack extends Stack {
       authCodesTable: database.authCodesTable,
       rateLimitsTable: database.rateLimitsTable,
       jwtSecret,
+      issuerUrl,
     });
 
     let api: Api;
@@ -60,6 +67,7 @@ export class EricAuthStack extends Stack {
 
       api = new Api(this, "ApiGateway", {
         handler: lambda.handler,
+        envName: props.envName,
         domainName: props.domainName,
         certificate,
       });
@@ -78,6 +86,7 @@ export class EricAuthStack extends Stack {
       // No custom domain — use API Gateway default URL
       api = new Api(this, "ApiGateway", {
         handler: lambda.handler,
+        envName: props.envName,
       });
     }
 

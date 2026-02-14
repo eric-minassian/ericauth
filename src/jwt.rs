@@ -9,8 +9,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::AuthError;
 
-const ISSUER: &str = "https://auth.ericminassian.com";
-
 /// Claims for an OAuth2 access token (JWT).
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AccessTokenClaims {
@@ -145,9 +143,10 @@ impl JwtKeys {
         &self,
         token: &str,
         audience: &str,
+        issuer: &str,
     ) -> Result<AccessTokenClaims, AuthError> {
         let mut validation = Validation::new(Algorithm::ES256);
-        validation.set_issuer(&[ISSUER]);
+        validation.set_issuer(&[issuer]);
         validation.set_audience(&[audience]);
 
         let token_data =
@@ -177,6 +176,8 @@ pub fn generate_es256_keypair() -> Result<(String, String), AuthError> {
 mod tests {
     use super::*;
 
+    const TEST_ISSUER: &str = "https://auth.ericminassian.com";
+
     fn test_keys() -> JwtKeys {
         let (private_pem, _) = generate_es256_keypair().unwrap();
         JwtKeys::from_pem(private_pem.as_bytes(), "test-kid-1").unwrap()
@@ -197,7 +198,7 @@ mod tests {
         let now = chrono::Utc::now().timestamp() as usize;
 
         let claims = AccessTokenClaims {
-            iss: ISSUER.to_string(),
+            iss: TEST_ISSUER.to_string(),
             sub: "user-123".to_string(),
             aud: "my-client".to_string(),
             exp: now + 900,
@@ -207,9 +208,11 @@ mod tests {
         };
 
         let token = keys.sign_access_token(&claims).unwrap();
-        let decoded = keys.verify_access_token(&token, "my-client").unwrap();
+        let decoded = keys
+            .verify_access_token(&token, "my-client", TEST_ISSUER)
+            .unwrap();
 
-        assert_eq!(decoded.iss, ISSUER);
+        assert_eq!(decoded.iss, TEST_ISSUER);
         assert_eq!(decoded.sub, "user-123");
         assert_eq!(decoded.aud, "my-client");
         assert_eq!(decoded.scope, "openid email");
@@ -222,7 +225,7 @@ mod tests {
         let now = chrono::Utc::now().timestamp() as usize;
 
         let claims = AccessTokenClaims {
-            iss: ISSUER.to_string(),
+            iss: TEST_ISSUER.to_string(),
             sub: "user-123".to_string(),
             aud: "my-client".to_string(),
             exp: now + 900,
@@ -232,7 +235,7 @@ mod tests {
         };
 
         let token = keys.sign_access_token(&claims).unwrap();
-        let result = keys.verify_access_token(&token, "wrong-client");
+        let result = keys.verify_access_token(&token, "wrong-client", TEST_ISSUER);
 
         assert!(result.is_err());
     }
@@ -243,7 +246,7 @@ mod tests {
         let now = chrono::Utc::now().timestamp() as usize;
 
         let claims = AccessTokenClaims {
-            iss: ISSUER.to_string(),
+            iss: TEST_ISSUER.to_string(),
             sub: "user-123".to_string(),
             aud: "my-client".to_string(),
             exp: now - 120,
@@ -253,7 +256,7 @@ mod tests {
         };
 
         let token = keys.sign_access_token(&claims).unwrap();
-        let result = keys.verify_access_token(&token, "my-client");
+        let result = keys.verify_access_token(&token, "my-client", TEST_ISSUER);
 
         assert!(result.is_err());
     }
@@ -264,7 +267,7 @@ mod tests {
         let now = chrono::Utc::now().timestamp() as usize;
 
         let claims = IdTokenClaims {
-            iss: ISSUER.to_string(),
+            iss: TEST_ISSUER.to_string(),
             sub: "user-456".to_string(),
             aud: "my-client".to_string(),
             exp: now + 3600,
@@ -280,7 +283,7 @@ mod tests {
 
         // Verify the ID token can be decoded with the same key
         let mut validation = Validation::new(Algorithm::ES256);
-        validation.set_issuer(&[ISSUER]);
+        validation.set_issuer(&[TEST_ISSUER]);
         validation.set_audience(&[&claims.aud]);
 
         let decoded =
@@ -297,7 +300,7 @@ mod tests {
         let now = chrono::Utc::now().timestamp() as usize;
 
         let claims = IdTokenClaims {
-            iss: ISSUER.to_string(),
+            iss: TEST_ISSUER.to_string(),
             sub: "user-789".to_string(),
             aud: "my-client".to_string(),
             exp: now + 3600,
@@ -312,7 +315,7 @@ mod tests {
         assert!(!token.is_empty());
 
         let mut validation = Validation::new(Algorithm::ES256);
-        validation.set_issuer(&[ISSUER]);
+        validation.set_issuer(&[TEST_ISSUER]);
         validation.set_audience(&[&claims.aud]);
 
         let decoded =
@@ -358,7 +361,7 @@ mod tests {
         let now = chrono::Utc::now().timestamp() as usize;
 
         let claims = AccessTokenClaims {
-            iss: ISSUER.to_string(),
+            iss: TEST_ISSUER.to_string(),
             sub: "user-123".to_string(),
             aud: "my-client".to_string(),
             exp: now + 900,

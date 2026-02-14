@@ -32,3 +32,9 @@ pub struct ErrorTemplate {
     pub title: String,
     pub message: String,
 }
+
+#[derive(Template)]
+#[template(path = "recovery_codes.html")]
+pub struct RecoveryCodesTemplate {
+    pub recovery_codes: Vec<String>,
+}

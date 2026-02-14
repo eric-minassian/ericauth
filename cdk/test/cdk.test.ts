@@ -54,10 +54,10 @@ test("creates refresh tokens table with TTL", () => {
   });
 });
 
-test("creates at least 3 DynamoDB tables", () => {
+test("creates exactly 8 DynamoDB tables", () => {
   const template = createTestStack();
   const tables = template.findResources("AWS::DynamoDB::GlobalTable");
-  expect(Object.keys(tables).length).toBeGreaterThanOrEqual(3);
+  expect(Object.keys(tables).length).toBe(8);
 });
 
 // --- Lambda ---
@@ -76,22 +76,51 @@ test("creates Lambda function with table name env vars", () => {
   });
 });
 
-// --- API Gateway ---
-
-test("creates REST API", () => {
+test("Lambda has ISSUER_URL environment variable", () => {
   const template = createTestStack();
 
-  template.hasResourceProperties("AWS::ApiGateway::RestApi", {
-    Name: "eric-auth",
+  template.hasResourceProperties("AWS::Lambda::Function", {
+    Environment: {
+      Variables: Match.objectLike({
+        ISSUER_URL: Match.anyValue(),
+      }),
+    },
   });
 });
 
-test("creates proxy resource with ANY method", () => {
+test("Lambda has 512 MB memory", () => {
   const template = createTestStack();
-  template.resourceCountIs("AWS::ApiGateway::Resource", 1);
 
-  template.hasResourceProperties("AWS::ApiGateway::Method", {
-    HttpMethod: "ANY",
+  template.hasResourceProperties("AWS::Lambda::Function", {
+    MemorySize: 512,
+  });
+});
+
+test("creates JWT secret in Secrets Manager", () => {
+  const template = createTestStack();
+
+  template.hasResourceProperties("AWS::SecretsManager::Secret", {
+    Name: "ericauth-test-jwt-private-key",
+  });
+});
+
+// --- API Gateway ---
+
+test("creates HTTP API", () => {
+  const template = createTestStack();
+
+  template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
+    Name: "ericauth-test",
+    ProtocolType: "HTTP",
+  });
+});
+
+test("creates API route with Lambda integration", () => {
+  const template = createTestStack();
+
+  template.resourceCountIs("AWS::ApiGatewayV2::Route", 1);
+  template.hasResourceProperties("AWS::ApiGatewayV2::Integration", {
+    IntegrationType: "AWS_PROXY",
   });
 });
 

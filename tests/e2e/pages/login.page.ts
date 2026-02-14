@@ -12,13 +12,13 @@ export class LoginPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.heading = page.getByRole('heading', { name: 'Log In' });
+    this.heading = page.getByRole('heading', { name: 'Sign in' });
     this.emailInput = page.getByLabel('Email');
     this.passwordInput = page.getByLabel('Password', { exact: true });
     this.continueButton = page.getByRole('button', { name: 'Continue' });
-    this.loginButton = page.getByRole('button', { name: 'Log In' });
-    this.passkeyButton = page.getByRole('button', { name: 'Use a Passkey' });
-    this.signupLink = page.getByRole('link', { name: 'Sign up' });
+    this.loginButton = page.getByRole('button', { name: 'Sign in', exact: true });
+    this.passkeyButton = page.getByRole('button', { name: 'Sign in with passkey' });
+    this.signupLink = page.getByRole('link', { name: 'Create account' });
   }
 
   async goto(query = ''): Promise<void> {

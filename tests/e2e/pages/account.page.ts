@@ -9,10 +9,10 @@ export class AccountPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.heading = page.getByRole('heading', { name: 'Account Security' });
-    this.logoutButton = page.getByRole('button', { name: 'Log Out' });
-    this.managePasskeysLink = page.getByRole('link', { name: 'Manage passkeys' });
-    this.revokeOthersButton = page.getByRole('button', { name: 'Sign Out Other Devices' });
+    this.heading = page.getByRole('heading', { name: 'Account' });
+    this.logoutButton = page.getByRole('button', { name: 'Sign out' });
+    this.managePasskeysLink = page.getByRole('link', { name: 'Passkeys' });
+    this.revokeOthersButton = page.getByRole('button', { name: 'Sign out all other devices' });
   }
 
   async expectLoaded(): Promise<void> {

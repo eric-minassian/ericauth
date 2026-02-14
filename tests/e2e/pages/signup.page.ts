@@ -10,11 +10,11 @@ export class SignupPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.heading = page.getByRole('heading', { name: 'Sign Up' });
+    this.heading = page.getByRole('heading', { name: 'Create account' });
     this.emailInput = page.getByLabel('Email');
     this.passwordInput = page.getByLabel('Password', { exact: true });
     this.confirmPasswordInput = page.getByLabel('Confirm Password');
-    this.signupButton = page.getByRole('button', { name: 'Sign Up' });
+    this.signupButton = page.getByRole('button', { name: 'Create account' });
   }
 
   async goto(): Promise<void> {

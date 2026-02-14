@@ -2,6 +2,7 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use base64::Engine;
 use lambda_http::tower::ServiceExt;
 use sha2::{digest::Update, Digest, Sha256};
 
@@ -1004,4 +1005,85 @@ async fn test_jwks_endpoint() {
     assert_eq!(keys[0]["kty"], "EC");
     assert_eq!(keys[0]["crv"], "P-256");
     assert_eq!(keys[0]["alg"], "ES256");
+}
+
+// --- Token introspection ---
+
+#[tokio::test]
+async fn test_introspect_valid_access_token() {
+    use ericauth::db::client::ClientTable;
+
+    let state = test_state();
+
+    // Register a confidential client
+    let client_secret = "integration-test-secret";
+    let secret_hash = hex::encode(Sha256::new().chain(client_secret.as_bytes()).finalize());
+    let client = ClientTable {
+        client_id: "introspect-client".to_string(),
+        client_secret: Some(secret_hash),
+        redirect_uris: vec!["https://example.com/callback".to_string()],
+        allowed_scopes: vec!["openid".to_string(), "email".to_string()],
+        client_name: "Introspect Test Client".to_string(),
+    };
+    state.db.insert_client(client).await.unwrap();
+
+    // Create an access token
+    let jwt_keys = state.jwt_keys.as_ref().unwrap();
+    let now = chrono::Utc::now().timestamp() as usize;
+    let claims = ericauth::jwt::AccessTokenClaims {
+        iss: "https://auth.ericminassian.com".to_string(),
+        sub: "user-introspect".to_string(),
+        aud: "some-app".to_string(),
+        exp: now + 900,
+        iat: now,
+        scope: "openid email".to_string(),
+        email: "introspect@example.com".to_string(),
+    };
+    let token = jwt_keys.sign_access_token(&claims).unwrap();
+
+    // Introspect it
+    let encoded = base64::engine::general_purpose::STANDARD
+        .encode(format!("introspect-client:{client_secret}"));
+    let app = test_router(state);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/token/introspect")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("authorization", format!("Basic {encoded}"))
+                .body(Body::from(format!("token={token}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["active"], true);
+    assert_eq!(json["sub"], "user-introspect");
+    assert_eq!(json["email"], "introspect@example.com");
+}
+
+#[tokio::test]
+async fn test_introspect_without_auth_returns_401() {
+    let state = test_state();
+    let app = test_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/token/introspect")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from("token=any-token"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }

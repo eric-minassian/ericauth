@@ -13,6 +13,8 @@ pub async fn handler() -> impl IntoResponse {
         "userinfo_endpoint": "https://auth.ericminassian.com/userinfo",
         "jwks_uri": "https://auth.ericminassian.com/.well-known/jwks.json",
         "revocation_endpoint": "https://auth.ericminassian.com/token/revoke",
+        "introspection_endpoint": "https://auth.ericminassian.com/token/introspect",
+        "introspection_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
         "response_types_supported": ["code"],
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["ES256"],
@@ -93,5 +95,13 @@ mod tests {
         );
         assert_eq!(json["response_types_supported"], json!(["code"]));
         assert_eq!(json["code_challenge_methods_supported"], json!(["S256"]));
+        assert_eq!(
+            json["introspection_endpoint"],
+            "https://auth.ericminassian.com/token/introspect"
+        );
+        assert_eq!(
+            json["introspection_endpoint_auth_methods_supported"],
+            json!(["client_secret_basic", "client_secret_post"])
+        );
     }
 }

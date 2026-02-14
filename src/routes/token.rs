@@ -409,6 +409,7 @@ mod tests {
             .db
             .insert_client(ClientTable {
                 client_id: "test-client".to_string(),
+                client_secret: None,
                 redirect_uris: vec!["http://localhost/callback".to_string()],
                 allowed_scopes: vec![
                     "openid".to_string(),

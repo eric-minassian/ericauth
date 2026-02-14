@@ -1132,6 +1132,7 @@ dependencies = [
  "serde_dynamo",
  "serde_json",
  "sha2",
+ "subtle",
  "tokio",
  "tower-http",
  "tracing",

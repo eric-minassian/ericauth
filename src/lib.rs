@@ -1,3 +1,4 @@
+pub mod client_auth;
 pub mod db;
 pub mod encryption;
 pub mod error;

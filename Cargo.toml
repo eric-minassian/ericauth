@@ -24,6 +24,7 @@ serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1"
 serde_dynamo = { version = "4.2.14", features = ["aws-sdk-dynamodb+1"] }
 sha2 = "0.10.8"
+subtle = "2"
 tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = "0.1"

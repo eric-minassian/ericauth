@@ -8,6 +8,8 @@ use super::DynamoDb;
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ClientTable {
     pub client_id: String,
+    #[serde(default)]
+    pub client_secret: Option<String>,
     pub redirect_uris: Vec<String>,
     pub allowed_scopes: Vec<String>,
     pub client_name: String,

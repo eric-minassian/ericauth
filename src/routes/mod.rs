@@ -3,6 +3,7 @@ pub(crate) mod authorize;
 mod consent;
 mod favicon;
 mod health;
+mod introspect;
 mod jwks;
 mod login;
 mod login_page;
@@ -75,6 +76,7 @@ pub fn router(state: AppState) -> Router {
     let cors_routes = Router::new()
         .route("/token", post(token::handler))
         .route("/token/revoke", post(token_revoke::handler))
+        .route("/token/introspect", post(introspect::handler))
         .route("/.well-known/jwks.json", get(jwks::handler))
         .route(
             "/.well-known/openid-configuration",

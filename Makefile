@@ -1,8 +1,12 @@
 # ─── Local Development ──────────────────────────────────────────────
 
 ## Run the Lambda locally with in-memory database (no AWS needed)
-watch:
-	DATABASE_BACKEND=memory cargo lambda watch
+dev:
+	DATABASE_BACKEND=memory MEMORY_DB_FILE=.ericauth-dev-db.json WEBAUTHN_RP_ID=localhost WEBAUTHN_RP_ORIGIN=http://localhost:9000 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:9000 cargo lambda watch
+
+## Reset local dev database snapshot
+dev-reset-db:
+	rm -f .ericauth-dev-db.json
 
 ## Run cargo tests
 test:
@@ -62,4 +66,4 @@ synth:
 login:
 	aws sso login --sso-session ericminassian
 
-.PHONY: watch test lint e2e fmt build build-release deploy-dev deploy-beta deploy-prod deploy-oidc-beta deploy-oidc-prod synth login
+.PHONY: dev dev-reset-db test lint e2e fmt build build-release deploy-dev deploy-beta deploy-prod deploy-oidc-beta deploy-oidc-prod synth login

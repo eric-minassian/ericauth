@@ -1,6 +1,11 @@
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::{
+    collections::HashMap,
+    env, fs,
+    path::{Path, PathBuf},
+    sync::{Arc, RwLock},
+};
 
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::AuthError;
@@ -14,17 +19,29 @@ use super::session::SessionTable;
 use super::user::UserTable;
 
 /// In-memory challenge record.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ChallengeRecord {
     pub challenge_data: String,
     pub expires_at: i64,
 }
 
 /// In-memory rate limit record.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct RateLimitRecord {
     pub count: i64,
     pub expires_at: i64,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+struct MemoryDbSnapshot {
+    users: HashMap<Uuid, UserTable>,
+    sessions: HashMap<String, SessionTable>,
+    refresh_tokens: HashMap<String, RefreshTokenTable>,
+    credentials: HashMap<String, CredentialTable>,
+    challenges: HashMap<String, ChallengeRecord>,
+    clients: HashMap<String, ClientTable>,
+    auth_codes: HashMap<String, AuthCodeTable>,
+    rate_limits: HashMap<String, RateLimitRecord>,
 }
 
 /// In-memory database backend for local development and testing.
@@ -39,20 +56,112 @@ pub struct MemoryDb {
     clients: Arc<RwLock<HashMap<String, ClientTable>>>,
     auth_codes: Arc<RwLock<HashMap<String, AuthCodeTable>>>,
     rate_limits: Arc<RwLock<HashMap<String, RateLimitRecord>>>,
+    persistence_path: Option<PathBuf>,
 }
 
 impl MemoryDb {
     pub fn new() -> Self {
+        let persistence_path = env::var("MEMORY_DB_FILE").ok().map(PathBuf::from);
+        let snapshot = match persistence_path.as_ref() {
+            Some(path) => match Self::load_snapshot(path) {
+                Ok(snapshot) => snapshot,
+                Err(e) => {
+                    tracing::warn!(path = %path.display(), error = %e, "Failed to load memory DB snapshot");
+                    MemoryDbSnapshot::default()
+                }
+            },
+            None => MemoryDbSnapshot::default(),
+        };
+
         Self {
-            users: Arc::new(RwLock::new(HashMap::new())),
-            sessions: Arc::new(RwLock::new(HashMap::new())),
-            refresh_tokens: Arc::new(RwLock::new(HashMap::new())),
-            credentials: Arc::new(RwLock::new(HashMap::new())),
-            challenges: Arc::new(RwLock::new(HashMap::new())),
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            auth_codes: Arc::new(RwLock::new(HashMap::new())),
-            rate_limits: Arc::new(RwLock::new(HashMap::new())),
+            users: Arc::new(RwLock::new(snapshot.users)),
+            sessions: Arc::new(RwLock::new(snapshot.sessions)),
+            refresh_tokens: Arc::new(RwLock::new(snapshot.refresh_tokens)),
+            credentials: Arc::new(RwLock::new(snapshot.credentials)),
+            challenges: Arc::new(RwLock::new(snapshot.challenges)),
+            clients: Arc::new(RwLock::new(snapshot.clients)),
+            auth_codes: Arc::new(RwLock::new(snapshot.auth_codes)),
+            rate_limits: Arc::new(RwLock::new(snapshot.rate_limits)),
+            persistence_path,
         }
+    }
+
+    fn load_snapshot(path: &Path) -> Result<MemoryDbSnapshot, AuthError> {
+        if !path.exists() {
+            return Ok(MemoryDbSnapshot::default());
+        }
+
+        let content = fs::read_to_string(path)
+            .map_err(|e| AuthError::Internal(format!("Failed to read memory DB snapshot: {e}")))?;
+
+        if content.trim().is_empty() {
+            return Ok(MemoryDbSnapshot::default());
+        }
+
+        serde_json::from_str(&content)
+            .map_err(|e| AuthError::Internal(format!("Failed to parse memory DB snapshot: {e}")))
+    }
+
+    fn persist_if_configured(&self) -> Result<(), AuthError> {
+        let Some(path) = self.persistence_path.as_ref() else {
+            return Ok(());
+        };
+
+        let snapshot = MemoryDbSnapshot {
+            users: self
+                .users
+                .read()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
+                .clone(),
+            sessions: self
+                .sessions
+                .read()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
+                .clone(),
+            refresh_tokens: self
+                .refresh_tokens
+                .read()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
+                .clone(),
+            credentials: self
+                .credentials
+                .read()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
+                .clone(),
+            challenges: self
+                .challenges
+                .read()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
+                .clone(),
+            clients: self
+                .clients
+                .read()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
+                .clone(),
+            auth_codes: self
+                .auth_codes
+                .read()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
+                .clone(),
+            rate_limits: self
+                .rate_limits
+                .read()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
+                .clone(),
+        };
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                AuthError::Internal(format!("Failed to create snapshot directory: {e}"))
+            })?;
+        }
+
+        let json = serde_json::to_string(&snapshot).map_err(|e| {
+            AuthError::Internal(format!("Failed to serialize memory DB snapshot: {e}"))
+        })?;
+
+        fs::write(path, json)
+            .map_err(|e| AuthError::Internal(format!("Failed to write memory DB snapshot: {e}")))
     }
 
     pub async fn get_user_by_email(&self, email: String) -> Result<Option<UserTable>, AuthError> {
@@ -72,33 +181,38 @@ impl MemoryDb {
         scopes: Vec<String>,
         recovery_codes: Vec<String>,
     ) -> Result<Uuid, AuthError> {
-        let mut users = self
-            .users
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        let id = {
+            let mut users = self
+                .users
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
 
-        if users.values().any(|u| u.email == email) {
-            return Err(AuthError::Conflict("email already in use".to_string()));
-        }
+            if users.values().any(|u| u.email == email) {
+                return Err(AuthError::Conflict("email already in use".to_string()));
+            }
 
-        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, email.as_bytes());
-        if users.contains_key(&id) {
-            return Err(AuthError::Conflict("email already in use".to_string()));
-        }
+            let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, email.as_bytes());
+            if users.contains_key(&id) {
+                return Err(AuthError::Conflict("email already in use".to_string()));
+            }
 
-        users.insert(
-            id,
-            UserTable {
+            users.insert(
                 id,
-                email,
-                password_hash,
-                created_at,
-                updated_at,
-                scopes,
-                recovery_codes,
-            },
-        );
+                UserTable {
+                    id,
+                    email,
+                    password_hash,
+                    created_at,
+                    updated_at,
+                    scopes,
+                    recovery_codes,
+                },
+            );
 
+            id
+        };
+
+        self.persist_if_configured()?;
         Ok(id)
     }
 
@@ -121,16 +235,20 @@ impl MemoryDb {
         let user_uuid = Uuid::parse_str(user_id)
             .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
 
-        let mut users = self
-            .users
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        {
+            let mut users = self
+                .users
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
 
-        let user = users
-            .get_mut(&user_uuid)
-            .ok_or_else(|| AuthError::NotFound("user not found".to_string()))?;
+            let user = users
+                .get_mut(&user_uuid)
+                .ok_or_else(|| AuthError::NotFound("user not found".to_string()))?;
 
-        user.scopes = scopes;
+            user.scopes = scopes;
+        }
+
+        self.persist_if_configured()?;
         Ok(())
     }
 
@@ -142,16 +260,20 @@ impl MemoryDb {
         let user_uuid = Uuid::parse_str(user_id)
             .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
 
-        let mut users = self
-            .users
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        {
+            let mut users = self
+                .users
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
 
-        let user = users
-            .get_mut(&user_uuid)
-            .ok_or_else(|| AuthError::NotFound("user not found".to_string()))?;
+            let user = users
+                .get_mut(&user_uuid)
+                .ok_or_else(|| AuthError::NotFound("user not found".to_string()))?;
 
-        user.recovery_codes.retain(|c| c != code_hash);
+            user.recovery_codes.retain(|c| c != code_hash);
+        }
+
+        self.persist_if_configured()?;
         Ok(())
     }
 
@@ -164,18 +286,21 @@ impl MemoryDb {
         let user_uuid = Uuid::parse_str(user_id)
             .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
 
-        let mut users = self
-            .users
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        {
+            let mut users = self
+                .users
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
 
-        let user = users
-            .get_mut(&user_uuid)
-            .ok_or_else(|| AuthError::NotFound("user not found".to_string()))?;
+            let user = users
+                .get_mut(&user_uuid)
+                .ok_or_else(|| AuthError::NotFound("user not found".to_string()))?;
 
-        user.recovery_codes = recovery_codes;
-        user.updated_at = updated_at.to_string();
+            user.recovery_codes = recovery_codes;
+            user.updated_at = updated_at.to_string();
+        }
 
+        self.persist_if_configured()?;
         Ok(())
     }
 
@@ -188,18 +313,21 @@ impl MemoryDb {
         let user_uuid = Uuid::parse_str(user_id)
             .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
 
-        let mut users = self
-            .users
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        {
+            let mut users = self
+                .users
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
 
-        let user = users
-            .get_mut(&user_uuid)
-            .ok_or_else(|| AuthError::NotFound("user not found".to_string()))?;
+            let user = users
+                .get_mut(&user_uuid)
+                .ok_or_else(|| AuthError::NotFound("user not found".to_string()))?;
 
-        user.password_hash = Some(password_hash);
-        user.updated_at = updated_at.to_string();
+            user.password_hash = Some(password_hash);
+            user.updated_at = updated_at.to_string();
+        }
 
+        self.persist_if_configured()?;
         Ok(())
     }
 
@@ -214,22 +342,28 @@ impl MemoryDb {
             user_agent: new_session.user_agent,
         };
 
-        let mut sessions = self
-            .sessions
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
-        sessions.insert(new_session.id, session);
+        {
+            let mut sessions = self
+                .sessions
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+            sessions.insert(new_session.id, session);
+        }
 
+        self.persist_if_configured()?;
         Ok(())
     }
 
     pub async fn delete_session(&self, id: &str) -> Result<(), AuthError> {
-        let mut sessions = self
-            .sessions
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
-        sessions.remove(id);
+        {
+            let mut sessions = self
+                .sessions
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+            sessions.remove(id);
+        }
 
+        self.persist_if_configured()?;
         Ok(())
     }
 
@@ -265,24 +399,37 @@ impl MemoryDb {
         id: &str,
         last_seen_at: i64,
     ) -> Result<(), AuthError> {
-        let mut sessions = self
-            .sessions
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        let updated = {
+            let mut sessions = self
+                .sessions
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
 
-        if let Some(session) = sessions.get_mut(id) {
-            session.last_seen_at = last_seen_at;
+            if let Some(session) = sessions.get_mut(id) {
+                session.last_seen_at = last_seen_at;
+                true
+            } else {
+                false
+            }
+        };
+
+        if updated {
+            self.persist_if_configured()?;
         }
 
         Ok(())
     }
 
     pub async fn insert_refresh_token(&self, token: &RefreshTokenTable) -> Result<(), AuthError> {
-        let mut tokens = self
-            .refresh_tokens
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
-        tokens.insert(token.token_hash.clone(), token.clone());
+        {
+            let mut tokens = self
+                .refresh_tokens
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+            tokens.insert(token.token_hash.clone(), token.clone());
+        }
+
+        self.persist_if_configured()?;
         Ok(())
     }
 
@@ -310,13 +457,22 @@ impl MemoryDb {
     }
 
     pub async fn revoke_refresh_token(&self, token_hash: &str) -> Result<(), AuthError> {
-        let mut tokens = self
-            .refresh_tokens
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        let updated = {
+            let mut tokens = self
+                .refresh_tokens
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
 
-        if let Some(token) = tokens.get_mut(token_hash) {
-            token.revoked = true;
+            if let Some(token) = tokens.get_mut(token_hash) {
+                token.revoked = true;
+                true
+            } else {
+                false
+            }
+        };
+
+        if updated {
+            self.persist_if_configured()?;
         }
 
         Ok(())
@@ -331,26 +487,29 @@ impl MemoryDb {
         passkey_json: &str,
         created_at: &str,
     ) -> Result<(), AuthError> {
-        let mut creds = self
-            .credentials
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        {
+            let mut creds = self
+                .credentials
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
 
-        if creds.contains_key(credential_id) {
-            return Err(AuthError::Conflict("credential already exists".to_string()));
+            if creds.contains_key(credential_id) {
+                return Err(AuthError::Conflict("credential already exists".to_string()));
+            }
+
+            creds.insert(
+                credential_id.to_string(),
+                CredentialTable {
+                    credential_id: credential_id.to_string(),
+                    user_id: user_id.to_string(),
+                    passkey_json: passkey_json.to_string(),
+                    created_at: created_at.to_string(),
+                    last_used_at: None,
+                },
+            );
         }
 
-        creds.insert(
-            credential_id.to_string(),
-            CredentialTable {
-                credential_id: credential_id.to_string(),
-                user_id: user_id.to_string(),
-                passkey_json: passkey_json.to_string(),
-                created_at: created_at.to_string(),
-                last_used_at: None,
-            },
-        );
-
+        self.persist_if_configured()?;
         Ok(())
     }
 
@@ -387,25 +546,33 @@ impl MemoryDb {
         credential_id: &str,
         passkey_json: &str,
     ) -> Result<(), AuthError> {
-        let mut creds = self
-            .credentials
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        {
+            let mut creds = self
+                .credentials
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
 
-        let cred = creds
-            .get_mut(credential_id)
-            .ok_or_else(|| AuthError::NotFound("credential not found".to_string()))?;
+            let cred = creds
+                .get_mut(credential_id)
+                .ok_or_else(|| AuthError::NotFound("credential not found".to_string()))?;
 
-        cred.passkey_json = passkey_json.to_string();
+            cred.passkey_json = passkey_json.to_string();
+        }
+
+        self.persist_if_configured()?;
         Ok(())
     }
 
     pub async fn delete_credential(&self, credential_id: &str) -> Result<(), AuthError> {
-        let mut creds = self
-            .credentials
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
-        creds.remove(credential_id);
+        {
+            let mut creds = self
+                .credentials
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+            creds.remove(credential_id);
+        }
+
+        self.persist_if_configured()?;
         Ok(())
     }
 
@@ -419,31 +586,38 @@ impl MemoryDb {
     ) -> Result<(), AuthError> {
         let expires_at = chrono::Utc::now().timestamp() + ttl_seconds;
 
-        let mut challenges = self
-            .challenges
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        {
+            let mut challenges = self
+                .challenges
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
 
-        challenges.insert(
-            challenge_id.to_string(),
-            ChallengeRecord {
-                challenge_data: challenge_data.to_string(),
-                expires_at,
-            },
-        );
+            challenges.insert(
+                challenge_id.to_string(),
+                ChallengeRecord {
+                    challenge_data: challenge_data.to_string(),
+                    expires_at,
+                },
+            );
+        }
 
+        self.persist_if_configured()?;
         Ok(())
     }
 
     pub async fn get_and_delete_challenge(&self, challenge_id: &str) -> Result<String, AuthError> {
-        let mut challenges = self
-            .challenges
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        let record = {
+            let mut challenges = self
+                .challenges
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
 
-        let record = challenges
-            .remove(challenge_id)
-            .ok_or_else(|| AuthError::NotFound("challenge not found".into()))?;
+            challenges
+                .remove(challenge_id)
+                .ok_or_else(|| AuthError::NotFound("challenge not found".into()))?
+        };
+
+        self.persist_if_configured()?;
 
         if record.expires_at <= chrono::Utc::now().timestamp() {
             return Err(AuthError::NotFound("challenge expired".into()));
@@ -464,52 +638,65 @@ impl MemoryDb {
 
     /// Insert a client (for testing purposes).
     pub async fn insert_client(&self, client: ClientTable) -> Result<(), AuthError> {
-        let mut clients = self
-            .clients
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
-        clients.insert(client.client_id.clone(), client);
+        {
+            let mut clients = self
+                .clients
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+            clients.insert(client.client_id.clone(), client);
+        }
+
+        self.persist_if_configured()?;
         Ok(())
     }
 
     // --- Auth code operations ---
 
     pub async fn insert_auth_code(&self, auth_code: &AuthCodeTable) -> Result<(), AuthError> {
-        let mut codes = self
-            .auth_codes
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
-        codes.insert(auth_code.code.clone(), auth_code.clone());
+        {
+            let mut codes = self
+                .auth_codes
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+            codes.insert(auth_code.code.clone(), auth_code.clone());
+        }
+
+        self.persist_if_configured()?;
         Ok(())
     }
 
     pub async fn redeem_auth_code(&self, code: &str) -> Result<Option<AuthCodeTable>, AuthError> {
-        let mut codes = self
-            .auth_codes
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        let (redeemed, mutated) = {
+            let mut codes = self
+                .auth_codes
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
 
-        let auth_code = match codes.get(code) {
-            Some(ac) => ac.clone(),
-            None => return Ok(None),
+            let auth_code = match codes.get(code) {
+                Some(ac) => ac.clone(),
+                None => return Ok(None),
+            };
+
+            if auth_code.used_at.is_some() {
+                return Ok(None);
+            }
+
+            if auth_code.expires_at <= chrono::Utc::now().timestamp() {
+                return Ok(None);
+            }
+
+            if let Some(ac) = codes.get_mut(code) {
+                ac.used_at = Some(chrono::Utc::now().timestamp());
+            }
+
+            (Some(auth_code), true)
         };
 
-        // Check if already used
-        if auth_code.used_at.is_some() {
-            return Ok(None);
+        if mutated {
+            self.persist_if_configured()?;
         }
 
-        // Check if expired
-        if auth_code.expires_at <= chrono::Utc::now().timestamp() {
-            return Ok(None);
-        }
-
-        // Mark as used
-        if let Some(ac) = codes.get_mut(code) {
-            ac.used_at = Some(chrono::Utc::now().timestamp());
-        }
-
-        Ok(Some(auth_code))
+        Ok(redeemed)
     }
 
     // --- Rate limit operations ---
@@ -520,37 +707,49 @@ impl MemoryDb {
         window_seconds: i64,
     ) -> Result<i64, AuthError> {
         let now = chrono::Utc::now().timestamp();
-        let mut limits = self
-            .rate_limits
-            .write()
-            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        let new_count = {
+            let mut limits = self
+                .rate_limits
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
 
-        let existing = limits.get(key).cloned();
+            let existing = limits.get(key).cloned();
 
-        // If the entry exists and hasn't expired, increment it
-        if let Some(record) = existing {
-            if record.expires_at > now {
-                let new_count = record.count + 1;
+            if let Some(record) = existing {
+                if record.expires_at > now {
+                    let new_count = record.count + 1;
+                    limits.insert(
+                        key.to_string(),
+                        RateLimitRecord {
+                            count: new_count,
+                            expires_at: record.expires_at,
+                        },
+                    );
+                    new_count
+                } else {
+                    limits.insert(
+                        key.to_string(),
+                        RateLimitRecord {
+                            count: 1,
+                            expires_at: now + window_seconds,
+                        },
+                    );
+                    1
+                }
+            } else {
                 limits.insert(
                     key.to_string(),
                     RateLimitRecord {
-                        count: new_count,
-                        expires_at: record.expires_at,
+                        count: 1,
+                        expires_at: now + window_seconds,
                     },
                 );
-                return Ok(new_count);
+                1
             }
-        }
+        };
 
-        // Otherwise, create a new entry
-        limits.insert(
-            key.to_string(),
-            RateLimitRecord {
-                count: 1,
-                expires_at: now + window_seconds,
-            },
-        );
-        Ok(1)
+        self.persist_if_configured()?;
+        Ok(new_count)
     }
 }
 

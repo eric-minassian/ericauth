@@ -14,10 +14,12 @@ Self-hosted authentication service built in Rust, deployed as a serverless Lambd
 Run the service locally with an in-memory database -- no AWS account or Docker needed:
 
 ```sh
-make watch
+make dev
 ```
 
 This starts the Lambda emulator at `http://localhost:9000`. Test it:
+
+Local dev data is persisted to `.ericauth-dev-db.json`, so users/passkeys/sessions survive `cargo lambda watch` recompiles.
 
 ```sh
 curl http://localhost:9000/health

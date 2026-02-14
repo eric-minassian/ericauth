@@ -960,7 +960,7 @@ async fn test_signup_page_returns_html() {
 }
 
 #[tokio::test]
-async fn test_favicon_route_returns_no_content() {
+async fn test_favicon_route_returns_svg() {
     let state = test_state();
     let app = test_router(state);
 
@@ -970,7 +970,14 @@ async fn test_favicon_route_returns_no_content() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert_eq!(response.status(), StatusCode::OK);
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(content_type.contains("image/svg+xml"));
 }
 
 // --- JWKS endpoint ---

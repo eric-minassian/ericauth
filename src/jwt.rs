@@ -2,9 +2,9 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use p256::ecdsa::SigningKey;
+use p256::elliptic_curve::rand_core::OsRng;
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use p256::pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey};
-use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 
 use crate::error::AuthError;

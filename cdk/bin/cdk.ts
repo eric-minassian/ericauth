@@ -4,6 +4,8 @@ import { EricAuthStack } from "../lib/cdk-stack";
 import { OidcStack } from "../lib/oidc-stack";
 
 const app = new cdk.App();
+const lambdaZipPath = app.node.tryGetContext("lambdaZip") as string | undefined;
+const prNumber = app.node.tryGetContext("prNumber") as string | undefined;
 
 // ─── Accounts ───────────────────────────────────────────────────────
 const BETA_ACCOUNT = "216482851496";
@@ -19,12 +21,14 @@ new EricAuthStack(app, "EricAuth-Dev", {
     region: process.env.CDK_DEFAULT_REGION ?? REGION,
   },
   envName: "dev",
+  lambdaZipPath,
 });
 
 // Beta
 new EricAuthStack(app, "EricAuth-Beta", {
   env: { account: BETA_ACCOUNT, region: REGION },
   envName: "beta",
+  lambdaZipPath,
   // domainName: "auth-beta.ericminassian.com",
   // hostedZoneDomain: "ericminassian.com",
 });
@@ -33,9 +37,18 @@ new EricAuthStack(app, "EricAuth-Beta", {
 new EricAuthStack(app, "EricAuth-Prod", {
   env: { account: PROD_ACCOUNT, region: REGION },
   envName: "prod",
+  lambdaZipPath,
   // domainName: "auth.ericminassian.com",
   // hostedZoneDomain: "ericminassian.com",
 });
+
+if (prNumber) {
+  new EricAuthStack(app, `EricAuth-Pr-${prNumber}`, {
+    env: { account: BETA_ACCOUNT, region: REGION },
+    envName: `pr-${prNumber}`,
+    lambdaZipPath,
+  });
+}
 
 // ─── OIDC stacks (one per account that needs CI/CD) ─────────────────
 

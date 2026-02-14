@@ -13,8 +13,8 @@ env:
   RUSTFLAGS: "-Dwarnings"
 
 jobs:
-  rust-quality:
-    name: Rust Quality
+  rust-quality-and-package:
+    name: Rust Quality & Package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,16 +25,11 @@ jobs:
           toolchain: 1.93.1
           components: rustfmt, clippy
 
-      - name: Cache cargo registry & build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+      - name: Install cargo-lambda
+        run: pip install cargo-lambda
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -47,30 +42,31 @@ jobs:
         env:
           ENCRYPTION_KEY: "01234567890123456789012345678901"
 
+      - name: Build Lambda package
+        run: cargo lambda build --release
+
+      - name: Create Lambda zip artifact
+        run: mkdir -p dist/lambda && cp target/lambda/ericauth/bootstrap dist/lambda/bootstrap && cd dist/lambda && zip -q ericauth.zip bootstrap
+
+      - name: Upload Lambda package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-package
+          path: dist/lambda/ericauth.zip
+          if-no-files-found: error
+
   cdk-synth:
     name: CDK Synth
+    needs: rust-quality-and-package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Download Lambda package artifact
+        uses: actions/download-artifact@v4
         with:
-          toolchain: 1.93.1
-
-      - name: Install cargo-lambda
-        run: pip install cargo-lambda
-
-      - name: Cache cargo registry & build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-lambda-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-lambda-
+          name: lambda-package
+          path: dist/lambda
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -89,33 +85,81 @@ jobs:
         working-directory: cdk
 
       - name: CDK Synth
-        run: pnpm cdk synth --no-lookup
+        run: pnpm cdk synth --no-lookup -c lambdaZip=../dist/lambda/ericauth.zip -c prNumber=${{ github.event.pull_request.number }}
         working-directory: cdk
 
-  e2e:
-    name: E2E (Playwright)
+      - name: Upload CDK assembly
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdk-assembly
+          path: cdk/cdk.out
+          if-no-files-found: error
+
+  deploy-preview:
+    name: Deploy Preview
+    needs: cdk-synth
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      api_url: ${{ steps.preview-output.outputs.api_url }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Download CDK assembly
+        uses: actions/download-artifact@v4
         with:
-          toolchain: 1.93.1
+          name: cdk-assembly
+          path: cdk/cdk.out
 
-      - name: Install cargo-lambda
-        run: pip install cargo-lambda
-
-      - name: Cache cargo registry & build
-        uses: actions/cache@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: cdk/pnpm-lock.yaml
+
+      - name: Install CDK dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: cdk
+
+      - name: Deploy preview stack
+        run: pnpm cdk deploy --app cdk.out EricAuth-Pr-${{ github.event.pull_request.number }} --require-approval never --outputs-file cdk-outputs.json
+        working-directory: cdk
+
+      - name: Capture preview API URL
+        id: preview-output
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          stack = "EricAuth-Pr-${{ github.event.pull_request.number }}"
+          with open("cdk/cdk-outputs.json", "r", encoding="utf-8") as f:
+              outputs = json.load(f)
+          print(f"api_url={outputs[stack]['ApiUrl']}")
+          PY
+
+  e2e-preview:
+    name: E2E (Preview)
+    needs: deploy-preview
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      E2E_BASE_URL: ${{ needs.deploy-preview.outputs.api_url }}
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -145,7 +189,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
         working-directory: tests/e2e
 
-      - name: Run E2E tests
+      - name: Run E2E tests against preview
         run: pnpm test -- --forbid-only
         working-directory: tests/e2e
 
@@ -153,8 +197,51 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-artifacts
+          name: playwright-artifacts-preview
           path: |
             /tmp/ericauth-playwright-results
             tests/e2e/playwright-report
           if-no-files-found: ignore
+
+  destroy-preview:
+    name: Destroy Preview
+    needs: [deploy-preview, e2e-preview]
+    if: always() && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download CDK assembly
+        uses: actions/download-artifact@v4
+        with:
+          name: cdk-assembly
+          path: cdk/cdk.out
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: cdk/pnpm-lock.yaml
+
+      - name: Install CDK dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: cdk
+
+      - name: Destroy preview stack
+        run: pnpm cdk destroy --app cdk.out EricAuth-Pr-${{ github.event.pull_request.number }} --force || true
+        working-directory: cdk

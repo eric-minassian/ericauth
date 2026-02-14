@@ -17,6 +17,13 @@ with AWS CDK (TypeScript) in `cdk/`.
 
 All primary commands are in the `Makefile` at the repo root.
 
+## CI/CD Architecture
+
+- CI/CD workflow design and artifact flow are documented in
+  `docs/ci-cd-architecture.md`.
+- When changing workflow behavior in `.github/workflows/`, update
+  `docs/ci-cd-architecture.md` in the same PR.
+
 ### Rust (primary codebase)
 
 ```bash

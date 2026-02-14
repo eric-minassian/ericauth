@@ -1,11 +1,11 @@
 import { DomainName, HttpApi } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { ICertificate } from "aws-cdk-lib/aws-certificatemanager";
-import { RustFunction } from "cargo-lambda-cdk";
+import { IFunction } from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 
 interface ApiProps {
-  handler: RustFunction;
+  handler: IFunction;
   /** Custom domain name. Omit for dev deployments. */
   domainName?: string;
   /** ACM certificate for the custom domain. Required if domainName is set. */

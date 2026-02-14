@@ -14,6 +14,8 @@ import { Lambda } from "./constructs/lambda";
 export interface EricAuthStackProps extends StackProps {
   /** Environment name: beta, prod, or dev */
   envName: string;
+  /** Optional path to a prebuilt Lambda zip artifact. */
+  lambdaZipPath?: string;
   /** Custom domain name (e.g. auth.ericminassian.com). Omit for dev. */
   domainName?: string;
   /** Root hosted zone domain for DNS validation. Required if domainName is set. */
@@ -43,6 +45,7 @@ export class EricAuthStack extends Stack {
       authCodesTable: database.authCodesTable,
       rateLimitsTable: database.rateLimitsTable,
       jwtSecret,
+      lambdaZipPath: props.lambdaZipPath,
     });
 
     let api: Api;

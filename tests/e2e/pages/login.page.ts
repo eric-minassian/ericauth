@@ -5,6 +5,7 @@ export class LoginPage {
   readonly heading: Locator;
   readonly emailInput: Locator;
   readonly passwordInput: Locator;
+  readonly continueButton: Locator;
   readonly loginButton: Locator;
   readonly passkeyButton: Locator;
   readonly signupLink: Locator;
@@ -14,6 +15,7 @@ export class LoginPage {
     this.heading = page.getByRole('heading', { name: 'Log In' });
     this.emailInput = page.getByLabel('Email');
     this.passwordInput = page.getByLabel('Password', { exact: true });
+    this.continueButton = page.getByRole('button', { name: 'Continue' });
     this.loginButton = page.getByRole('button', { name: 'Log In' });
     this.passkeyButton = page.getByRole('button', { name: 'Use a Passkey' });
     this.signupLink = page.getByRole('link', { name: 'Sign up' });
@@ -27,12 +29,13 @@ export class LoginPage {
 
   async loginWithPassword(email: string, password: string): Promise<void> {
     await this.emailInput.fill(email);
+    await this.continueButton.click();
     await this.passwordInput.fill(password);
     await this.loginButton.click();
   }
 
   async loginWithPasskey(email: string): Promise<void> {
     await this.emailInput.fill(email);
-    await this.passkeyButton.click();
+    await this.continueButton.click();
   }
 }

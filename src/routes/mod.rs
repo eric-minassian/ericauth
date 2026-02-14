@@ -18,13 +18,15 @@ mod token;
 mod token_revoke;
 mod userinfo;
 
+use std::env;
+
 use axum::{
     http::{HeaderValue, Method},
     middleware,
     routing::{get, post},
     Router,
 };
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::{
     middleware::{
@@ -35,12 +37,33 @@ use crate::{
 };
 
 pub fn router(state: AppState) -> Router {
+    let cors_allowed_origins = env::var("CORS_ALLOWED_ORIGINS")
+        .unwrap_or_else(|_| "https://auth.ericminassian.com".to_string())
+        .split(',')
+        .filter_map(|origin| {
+            let trimmed = origin.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+
+            match trimmed.parse::<HeaderValue>() {
+                Ok(value) => Some(value),
+                Err(e) => {
+                    tracing::warn!(origin = trimmed, error = %e, "Ignoring invalid CORS origin");
+                    None
+                }
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let cors_allowed_origins = if cors_allowed_origins.is_empty() {
+        vec![HeaderValue::from_static("https://auth.ericminassian.com")]
+    } else {
+        cors_allowed_origins
+    };
+
     let cors = CorsLayer::new()
-        .allow_origin(
-            "https://auth.ericminassian.com"
-                .parse::<HeaderValue>()
-                .unwrap(),
-        )
+        .allow_origin(AllowOrigin::list(cors_allowed_origins))
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers([
             axum::http::header::CONTENT_TYPE,

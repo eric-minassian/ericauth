@@ -14,8 +14,10 @@
     <label for="email">Email</label>
     <input type="email" id="email" name="email" required autocomplete="email" {% if let Some(e) = email %}value="{{ e }}"{% endif %}>
 
-    <label for="password">Password</label>
-    <input type="password" id="password" name="password" required autocomplete="current-password">
+    <div id="password-section">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+    </div>
 
     {% if let Some(uri) = redirect_uri %}
     <input type="hidden" name="redirect_uri" value="{{ uri }}">
@@ -42,7 +44,8 @@
     <input type="hidden" name="nonce" value="{{ n }}">
     {% endif %}
 
-    <button type="submit" class="btn btn-primary">Log In</button>
+    <button type="button" id="continue-btn" class="btn btn-primary">Continue</button>
+    <button type="submit" id="password-login-btn" class="btn btn-primary">Log In</button>
 </form>
 
 <button type="button" id="passkey-btn" class="btn btn-secondary" style="display:none;">Use a Passkey</button>
@@ -58,10 +61,37 @@
 
 <script>
 (function() {
-    if (!window.PublicKeyCredential) return;
+    var hasPasskeySupport = !!window.PublicKeyCredential && !!(navigator.credentials && navigator.credentials.get);
+    var form = document.querySelector('form[action="/login"]');
+    var emailInput = document.getElementById('email');
+    var passwordInput = document.getElementById('password');
+    var passwordSection = document.getElementById('password-section');
+    var continueBtn = document.getElementById('continue-btn');
+    var passwordLoginBtn = document.getElementById('password-login-btn');
     var btn = document.getElementById('passkey-btn');
     var errEl = document.getElementById('passkey-error');
-    btn.style.display = 'block';
+
+    function showPasswordFallback(message) {
+        passwordSection.style.display = 'block';
+        passwordLoginBtn.style.display = 'block';
+        passwordInput.disabled = false;
+        passwordInput.required = true;
+        continueBtn.style.display = 'none';
+        if (message) {
+            errEl.textContent = message;
+            errEl.style.display = 'block';
+        }
+        passwordInput.focus();
+    }
+
+    function hidePasswordFallback() {
+        passwordSection.style.display = 'none';
+        passwordLoginBtn.style.display = 'none';
+        passwordInput.disabled = true;
+        passwordInput.required = false;
+    }
+
+    hidePasswordFallback();
 
     function toBase64Url(buf) {
         var bytes = new Uint8Array(buf);
@@ -79,79 +109,187 @@
         return arr.buffer;
     }
 
+    async function readResponseMessage(res, fallbackMessage) {
+        var text = await res.text();
+        if (!text) return fallbackMessage;
+        try {
+            var parsed = JSON.parse(text);
+            if (parsed && typeof parsed.message === 'string' && parsed.message) {
+                return parsed.message;
+            }
+        } catch (_) {
+            // Keep original text fallback.
+        }
+        return text;
+    }
+
+    function isNoPasskeyFallbackError(message) {
+        return message === 'No passkey found for this email. Enter your password to continue.';
+    }
+
+    async function beginPasskeyAuth(emailValue) {
+        var authBody = { email: emailValue };
+        var beginRes = await fetch('/passkeys/auth/begin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(authBody)
+        });
+        if (!beginRes.ok) {
+            var beginErr = await readResponseMessage(beginRes, 'Failed to start passkey auth');
+            if (beginRes.status === 401 && (beginErr === 'no passkeys registered' || beginErr === 'invalid email or passkey')) {
+                throw new Error('No passkey found for this email. Enter your password to continue.');
+            }
+            throw new Error(beginErr || 'Failed to start passkey auth');
+        }
+        var beginData = await beginRes.json();
+
+        var options = beginData.options;
+        var allowCredentials = options.publicKey.allowCredentials || [];
+
+        options.publicKey.challenge = fromBase64Url(options.publicKey.challenge);
+        if (allowCredentials.length > 0) {
+            options.publicKey.allowCredentials = allowCredentials.map(function(c) {
+                return { id: fromBase64Url(c.id), type: c.type };
+            });
+        }
+
+        if (options.mediation === 'conditional') {
+            options.mediation = 'optional';
+        }
+
+        return {
+            challengeId: beginData.challenge_id,
+            options: options
+        };
+    }
+
+    async function runPasskeyAuth(emailValue) {
+        var beginData = await beginPasskeyAuth(emailValue);
+
+        var credential = await navigator.credentials.get({
+            publicKey: beginData.options.publicKey,
+            mediation: beginData.options.mediation
+        });
+        if (!credential) throw new Error('Passkey authentication was cancelled');
+
+        var body = {
+            challenge_id: beginData.challengeId,
+            credential: {
+                id: credential.id,
+                rawId: toBase64Url(credential.rawId),
+                type: credential.type,
+                response: {
+                    authenticatorData: toBase64Url(credential.response.authenticatorData),
+                    clientDataJSON: toBase64Url(credential.response.clientDataJSON),
+                    signature: toBase64Url(credential.response.signature),
+                    userHandle: credential.response.userHandle ? toBase64Url(credential.response.userHandle) : null
+                }
+            }
+        };
+
+        var completeRes = await fetch('/passkeys/auth/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!completeRes.ok) {
+            var completeErr = await readResponseMessage(completeRes, 'Passkey authentication failed');
+            throw new Error(completeErr || 'Passkey authentication failed');
+        }
+
+        var oauthKeys = [
+            'client_id',
+            'redirect_uri',
+            'response_type',
+            'scope',
+            'state',
+            'code_challenge',
+            'code_challenge_method',
+            'nonce'
+        ];
+        var oauthParams = new URLSearchParams();
+        for (var i = 0; i < oauthKeys.length; i++) {
+            var key = oauthKeys[i];
+            var input = document.querySelector('input[name="' + key + '"]');
+            if (input && input.value) oauthParams.set(key, input.value);
+        }
+
+        if (oauthParams.get('client_id') && oauthParams.get('redirect_uri')) {
+            window.location.href = '/authorize?' + oauthParams.toString();
+        } else {
+            window.location.href = '/account';
+        }
+    }
+
+    continueBtn.addEventListener('click', async function() {
+        errEl.style.display = 'none';
+        var emailValue = emailInput && emailInput.value ? emailInput.value.trim() : '';
+        if (!emailValue) {
+            showPasswordFallback('Enter your email to continue.');
+            return;
+        }
+
+        if (!hasPasskeySupport) {
+            showPasswordFallback();
+            return;
+        }
+
+        var originalText = continueBtn.textContent;
+        continueBtn.disabled = true;
+        continueBtn.textContent = 'Checking passkey...';
+        try {
+            btn.style.display = 'block';
+            await runPasskeyAuth(emailValue);
+        } catch (e) {
+            var message = e && e.message ? e.message : '';
+            if (isNoPasskeyFallbackError(message)) {
+                showPasswordFallback();
+            } else {
+                showPasswordFallback(message || 'Passkey sign-in unavailable. Use your password.');
+            }
+        } finally {
+            continueBtn.disabled = false;
+            continueBtn.textContent = originalText;
+        }
+    });
+
     btn.addEventListener('click', async function() {
         errEl.style.display = 'none';
+        var emailValue = emailInput && emailInput.value ? emailInput.value.trim() : '';
+        if (!emailValue) {
+            showPasswordFallback('Enter your email before using a passkey.');
+            return;
+        }
+
+        var originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Waiting for passkey...';
         try {
-            var emailInput = document.getElementById('email');
-            var authBody = {};
-            if (emailInput && emailInput.value) {
-                authBody.email = emailInput.value;
-            }
-            var beginRes = await fetch('/passkeys/auth/begin', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(authBody)
-            });
-            if (!beginRes.ok) throw new Error('Failed to start passkey auth');
-            var beginData = await beginRes.json();
-
-            var options = beginData.options;
-            options.publicKey.challenge = fromBase64Url(options.publicKey.challenge);
-            if (options.publicKey.allowCredentials) {
-                options.publicKey.allowCredentials = options.publicKey.allowCredentials.map(function(c) {
-                    return { id: fromBase64Url(c.id), type: c.type };
-                });
-            }
-
-            var credential = await navigator.credentials.get(options);
-
-            var body = {
-                challenge_id: beginData.challenge_id,
-                credential: {
-                    id: credential.id,
-                    rawId: toBase64Url(credential.rawId),
-                    type: credential.type,
-                    response: {
-                        authenticatorData: toBase64Url(credential.response.authenticatorData),
-                        clientDataJSON: toBase64Url(credential.response.clientDataJSON),
-                        signature: toBase64Url(credential.response.signature),
-                        userHandle: credential.response.userHandle ? toBase64Url(credential.response.userHandle) : null
-                    }
-                }
-            };
-
-            var completeRes = await fetch('/passkeys/auth/complete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            if (!completeRes.ok) throw new Error('Passkey authentication failed');
-
-            var oauthKeys = [
-                'client_id',
-                'redirect_uri',
-                'response_type',
-                'scope',
-                'state',
-                'code_challenge',
-                'code_challenge_method',
-                'nonce'
-            ];
-            var oauthParams = new URLSearchParams();
-            for (var i = 0; i < oauthKeys.length; i++) {
-                var key = oauthKeys[i];
-                var input = document.querySelector('input[name="' + key + '"]');
-                if (input && input.value) oauthParams.set(key, input.value);
-            }
-
-            if (oauthParams.get('client_id') && oauthParams.get('redirect_uri')) {
-                window.location.href = '/authorize?' + oauthParams.toString();
-            } else {
-                window.location.href = '/account';
-            }
+            await runPasskeyAuth(emailValue);
         } catch (e) {
-            errEl.textContent = e.message || 'Passkey authentication failed';
-            errEl.style.display = 'block';
+            var message = e && e.message ? e.message : '';
+            if (!isNoPasskeyFallbackError(message)) {
+                errEl.textContent = message || 'Passkey authentication failed';
+                errEl.style.display = 'block';
+            }
+            showPasswordFallback();
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    });
+
+    form.addEventListener('submit', function(e) {
+        if (passwordLoginBtn.style.display === 'none') {
+            e.preventDefault();
+            continueBtn.click();
+        }
+    });
+
+    emailInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && passwordLoginBtn.style.display === 'none') {
+            e.preventDefault();
+            continueBtn.click();
         }
     });
 })();

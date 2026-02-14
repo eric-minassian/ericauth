@@ -49,7 +49,7 @@ make build                  # cargo lambda build
 make build-release          # cargo lambda build --release
 
 # Local dev server (in-memory DB, no AWS credentials needed)
-make watch                  # DATABASE_BACKEND=memory cargo lambda watch
+make dev                    # DATABASE_BACKEND=memory MEMORY_DB_FILE=.ericauth-dev-db.json cargo lambda watch
 ```
 
 ### CI Environment Flags

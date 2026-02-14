@@ -1,0 +1,57 @@
+name: Rust CI Reusable
+
+on:
+  workflow_call:
+    inputs:
+      run-fmt:
+        type: boolean
+        required: false
+        default: true
+      run-clippy:
+        type: boolean
+        required: false
+        default: true
+      run-tests:
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
+  RUSTC_WRAPPER: sccache
+  SCCACHE_GHA_ENABLED: "true"
+  ENCRYPTION_KEY: "01234567890123456789012345678901"
+
+jobs:
+  rust-ci:
+    name: Rust CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          components: clippy,rustfmt
+          use-sccache: "true"
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2.67.30
+        with:
+          tool: cargo-nextest
+
+      - if: inputs.run-fmt
+        name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - if: inputs.run-clippy
+        name: Clippy
+        run: cargo clippy --all-targets --all-features --no-deps -- -D warnings
+
+      - if: inputs.run-tests
+        name: Run tests
+        run: cargo nextest run --all-features

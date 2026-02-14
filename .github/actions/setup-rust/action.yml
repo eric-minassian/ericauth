@@ -1,0 +1,39 @@
+name: Setup Rust
+description: Install Rust toolchain, optional sccache, cache, and cargo-lambda
+
+inputs:
+  components:
+    description: Comma-separated rust components
+    required: false
+    default: ""
+  install-cargo-lambda:
+    description: Install cargo-lambda via pip
+    required: false
+    default: "false"
+  use-sccache:
+    description: Enable sccache action
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - if: inputs.components == ''
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+
+    - if: inputs.components != ''
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        components: ${{ inputs.components }}
+
+    - if: inputs.use-sccache == 'true'
+      uses: mozilla-actions/sccache-action@v0.0.9
+
+    - uses: Swatinem/rust-cache@v2.8.2
+
+    - if: inputs.install-cargo-lambda == 'true'
+      shell: bash
+      run: pip install cargo-lambda

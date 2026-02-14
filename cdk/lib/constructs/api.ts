@@ -6,6 +6,7 @@ import { Construct } from "constructs";
 
 interface ApiProps {
   handler: RustFunction;
+  envName: string;
   /** Custom domain name. Omit for dev deployments. */
   domainName?: string;
   /** ACM certificate for the custom domain. Required if domainName is set. */
@@ -31,7 +32,7 @@ export class Api extends Construct {
     }
 
     this.api = new HttpApi(this, "HttpApi", {
-      apiName: "eric-auth",
+      apiName: `ericauth-${props.envName}`,
       defaultIntegration: integration,
       ...(defaultDomainMapping && { defaultDomainMapping }),
     });

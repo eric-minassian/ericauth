@@ -4,7 +4,7 @@ use sha2::{digest::Update, Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
-    db::{session::NewSession, Database},
+    db::{self, session::NewSession},
     error::AuthError,
 };
 
@@ -24,7 +24,7 @@ pub fn generate_session_token() -> Result<String, AuthError> {
 }
 
 pub async fn create_session(
-    db: &Database,
+    db: &dyn db::Database,
     token: String,
     user_id: Uuid,
     ip_address: String,

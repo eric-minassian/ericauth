@@ -3,6 +3,7 @@ pub mod encryption;
 pub mod error;
 pub mod jwt;
 pub mod middleware;
+pub mod oauth;
 pub mod password;
 pub mod refresh_token;
 pub mod routes;

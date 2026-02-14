@@ -9,6 +9,7 @@ const app = new cdk.App();
 const BETA_ACCOUNT = "216482851496";
 const PROD_ACCOUNT = "326884876551";
 const REGION = "us-east-1";
+const GITHUB_REPO = "eric-minassian/ericauth";
 
 // ─── App stacks (one per environment) ───────────────────────────────
 
@@ -41,10 +42,10 @@ new EricAuthStack(app, "EricAuth-Prod", {
 
 new OidcStack(app, "EricAuth-Oidc-Beta", {
   env: { account: BETA_ACCOUNT, region: REGION },
-  githubRepo: "eric-minassian/ericauth",
+  githubRepo: GITHUB_REPO,
 });
 
 new OidcStack(app, "EricAuth-Oidc-Prod", {
   env: { account: PROD_ACCOUNT, region: REGION },
-  githubRepo: "eric-minassian/ericauth",
+  githubRepo: GITHUB_REPO,
 });

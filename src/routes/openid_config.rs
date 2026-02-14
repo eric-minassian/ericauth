@@ -1,18 +1,22 @@
 use axum::{
+    extract::State,
     http::{header, HeaderValue},
     response::IntoResponse,
     Json,
 };
 use serde_json::json;
 
-pub async fn handler() -> impl IntoResponse {
+use crate::state::AppState;
+
+pub async fn handler(State(state): State<AppState>) -> impl IntoResponse {
+    let issuer = &state.issuer_url;
     let config = json!({
-        "issuer": "https://auth.ericminassian.com",
-        "authorization_endpoint": "https://auth.ericminassian.com/authorize",
-        "token_endpoint": "https://auth.ericminassian.com/token",
-        "userinfo_endpoint": "https://auth.ericminassian.com/userinfo",
-        "jwks_uri": "https://auth.ericminassian.com/.well-known/jwks.json",
-        "revocation_endpoint": "https://auth.ericminassian.com/token/revoke",
+        "issuer": issuer,
+        "authorization_endpoint": format!("{issuer}/authorize"),
+        "token_endpoint": format!("{issuer}/token"),
+        "userinfo_endpoint": format!("{issuer}/userinfo"),
+        "jwks_uri": format!("{issuer}/.well-known/jwks.json"),
+        "revocation_endpoint": format!("{issuer}/token/revoke"),
         "response_types_supported": ["code"],
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["ES256"],
@@ -49,11 +53,21 @@ mod tests {
     };
     use lambda_http::tower::ServiceExt;
 
+    use crate::db;
+
     fn test_router() -> Router {
-        Router::new().route(
-            "/.well-known/openid-configuration",
-            axum::routing::get(handler),
-        )
+        let state = AppState {
+            db: db::memory(),
+            jwt_keys: None,
+            webauthn: std::sync::Arc::new(crate::webauthn_config::build_webauthn().unwrap()),
+            issuer_url: "https://auth.test.example.com".to_string(),
+        };
+        Router::new()
+            .route(
+                "/.well-known/openid-configuration",
+                axum::routing::get(handler),
+            )
+            .with_state(state)
     }
 
     #[tokio::test]
@@ -78,18 +92,18 @@ mod tests {
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(json["issuer"], "https://auth.ericminassian.com");
+        assert_eq!(json["issuer"], "https://auth.test.example.com");
         assert_eq!(
             json["authorization_endpoint"],
-            "https://auth.ericminassian.com/authorize"
+            "https://auth.test.example.com/authorize"
         );
         assert_eq!(
             json["token_endpoint"],
-            "https://auth.ericminassian.com/token"
+            "https://auth.test.example.com/token"
         );
         assert_eq!(
             json["userinfo_endpoint"],
-            "https://auth.ericminassian.com/userinfo"
+            "https://auth.test.example.com/userinfo"
         );
         assert_eq!(json["response_types_supported"], json!(["code"]));
         assert_eq!(json["code_challenge_methods_supported"], json!(["S256"]));

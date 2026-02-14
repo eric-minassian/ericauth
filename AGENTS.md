@@ -23,7 +23,7 @@ All primary commands are in the `Makefile` at the repo root.
 # Run all tests (ENCRYPTION_KEY env var is required)
 make test
 # Which expands to:
-ENCRYPTION_KEY="01234567890123456789012345678901" cargo test --all-features
+ENCRYPTION_KEY="01234567890123456789012345678901" cargo nextest run --all-features
 
 # Run a single test by name (substring match)
 ENCRYPTION_KEY="01234567890123456789012345678901" cargo test <test_name> --all-features
@@ -37,19 +37,25 @@ ENCRYPTION_KEY="01234567890123456789012345678901" cargo test --all-features -- e
 make lint
 # Which expands to:
 cargo fmt --all -- --check
-cargo clippy --all-targets --all-features
+cargo clippy --all-targets --all-features --no-deps -- -D warnings
 
 # Auto-format code
 make fmt
 # Which expands to:
 cargo fmt --all
 
+# Type-check without building
+make check                  # cargo check --all-features
+
+# Remove build artifacts
+make clean                  # cargo clean
+
 # Build (debug, for Lambda)
 make build                  # cargo lambda build
 make build-release          # cargo lambda build --release
 
 # Local dev server (in-memory DB, no AWS credentials needed)
-make dev                    # DATABASE_BACKEND=memory MEMORY_DB_FILE=.ericauth-dev-db.json cargo lambda watch
+make dev
 ```
 
 ### CI Environment Flags
@@ -76,12 +82,13 @@ src/
   lib.rs            # Module declarations, recovery code generation
   state.rs          # AppState struct (holds Database)
   user.rs           # User model + create_user()
+  oauth.rs          # Shared OAuth query string builders
   password.rs       # Argon2id hashing, password strength validation
   session.rs        # Session token generation, cookie building
   encryption.rs     # AES-256-GCM encrypt/decrypt utilities
   validation.rs     # Email validation
   db/
-    mod.rs          # Database enum (Dynamo | Memory) with method dispatch
+    mod.rs          # Database trait with DynamoDb and MemoryDb implementations
     user.rs         # DynamoDB user CRUD (UserTable)
     session.rs      # DynamoDB session operations (SessionTable)
     memory.rs       # In-memory DB backend for local dev/tests
@@ -143,22 +150,26 @@ use crate::{
 
 ### Types and Error Handling
 
-- Route handlers return `Result<impl IntoResponse, (StatusCode, String)>`
-- Database methods return `Result<T, String>`
+- Route handlers return `Result<impl IntoResponse, AuthError>`
+- `AuthError` is defined in `src/error.rs` with variants: `BadRequest`, `Unauthorized`,
+  `NotFound`, `Conflict`, `Internal`, `TooManyRequests`
+- `AuthError` implements `IntoResponse`, producing JSON `{"error": "kind", "message": "..."}`
+- Database methods are defined by the `Database` trait in `src/db/mod.rs`
 - Business logic / crypto functions return `Result<T, &'static str>`
-- Use `.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?` to convert
-  lower-level errors into HTTP responses in route handlers
+- Use `?` operator to propagate errors — `From` impls handle conversion
 - Avoid `.unwrap()` in new code — use `?` operator or explicit error handling
 
 ### Architecture Patterns
 
-- **Database abstraction:** `Database` is an enum (`Dynamo | Memory`). Each variant
-  implements the same methods; `db/mod.rs` dispatches via match. Add new operations
-  to both variants.
+- **Database abstraction:** `Database` is a trait defined in `db/mod.rs`. `DynamoDb` and
+  `MemoryDb` implement it. `AppState` holds `Arc<dyn Database>`. Add new operations by
+  extending the trait and implementing on both backends.
 - **State:** `AppState` is passed to handlers via axum `State` extractor.
-- **Environment config:** Table names, `DATABASE_BACKEND`, and `ENCRYPTION_KEY` are
+- **Environment config:** Table names, `DATABASE_BACKEND`, `ENCRYPTION_KEY`, and `ISSUER_URL` are
   read from environment variables. Use `env::var()` with sensible defaults or
   explicit `.expect()` for required vars.
+- **`ISSUER_URL`:** Base URL for JWT issuer claims and OIDC discovery (e.g., `https://auth.ericminassian.com`).
+  Set via CDK Lambda environment variables for deployed environments, or `ISSUER_URL=http://localhost:9000` for local dev.
 - **Security:** Passwords hashed with Argon2id. Session tokens SHA-256 hashed before
   storage. AES-256-GCM for field encryption. Session cookies are
   `HttpOnly; Secure; SameSite=Lax`.

@@ -29,5 +29,9 @@ tests/e2e/playwright-report/
 # Local dev memory DB snapshot
 .ericauth-dev-db.json
 
+# Environment files
+.env
+.env.*
+
 # Git worktrees
 .worktrees/

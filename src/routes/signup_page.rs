@@ -2,7 +2,9 @@ use askama::Template;
 use axum::{extract::Query, response::IntoResponse, Extension};
 use serde::Deserialize;
 
-use crate::{error::AuthError, middleware::csrf::CsrfToken, templates::render};
+use crate::{
+    error::AuthError, middleware::csrf::CsrfToken, oauth::build_oauth_link_query, templates::render,
+};
 
 #[derive(Deserialize)]
 pub struct SignupPageQuery {
@@ -64,20 +66,4 @@ pub async fn handler(
         nonce: params.nonce,
         oauth_query,
     })
-}
-
-fn build_oauth_link_query(params: &[(&str, &Option<String>)]) -> String {
-    let mut qs = form_urlencoded::Serializer::new(String::new());
-    let mut has_params = false;
-    for &(key, value) in params {
-        if let Some(v) = value {
-            qs.append_pair(key, v);
-            has_params = true;
-        }
-    }
-    if has_params {
-        qs.finish()
-    } else {
-        String::new()
-    }
 }

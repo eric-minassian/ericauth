@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
-    db::Database, error::AuthError, generate_random_recovery_code, password::hash_password,
+    db, error::AuthError, generate_random_recovery_code, password::hash_password,
     validation::normalize_email,
 };
 
@@ -26,7 +26,7 @@ pub fn verify_username_input(username: &str) -> bool {
 }
 
 pub async fn create_user(
-    db: &Database,
+    db: &dyn db::Database,
     email: String,
     password: String,
 ) -> Result<User, AuthError> {

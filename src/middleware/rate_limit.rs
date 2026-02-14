@@ -55,15 +55,16 @@ mod tests {
     use axum::{body::Body, http::Request, middleware, routing::post, Router};
     use lambda_http::tower::ServiceExt;
 
-    use crate::{db::Database, jwt::generate_es256_keypair, jwt::JwtKeys};
+    use crate::{jwt::generate_es256_keypair, jwt::JwtKeys};
 
     fn test_state() -> AppState {
         let (private_pem, _) = generate_es256_keypair().unwrap();
         let jwt_keys = JwtKeys::from_pem(private_pem.as_bytes(), "test-kid").unwrap();
         AppState {
-            db: Database::memory(),
+            db: crate::db::memory(),
             jwt_keys: Some(jwt_keys),
             webauthn: std::sync::Arc::new(crate::webauthn_config::build_webauthn().unwrap()),
+            issuer_url: "https://auth.test.example.com".to_string(),
         }
     }
 

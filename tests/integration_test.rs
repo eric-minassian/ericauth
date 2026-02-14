@@ -6,7 +6,7 @@ use lambda_http::tower::ServiceExt;
 use sha2::{digest::Update, Digest, Sha256};
 
 use ericauth::{
-    db::{refresh_token::RefreshTokenTable, Database},
+    db::refresh_token::RefreshTokenTable,
     jwt::{generate_es256_keypair, JwtKeys},
     refresh_token::generate_refresh_token,
     routes,
@@ -20,9 +20,10 @@ fn test_state() -> AppState {
         ericauth::webauthn_config::build_webauthn().expect("Failed to initialize WebAuthn"),
     );
     AppState {
-        db: Database::memory(),
+        db: ericauth::db::memory(),
         jwt_keys: Some(jwt_keys),
         webauthn,
+        issuer_url: "https://auth.test.example.com".to_string(),
     }
 }
 

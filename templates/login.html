@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}Log In — EricAuth{% endblock %}
+{% block title %}Sign in — EricAuth{% endblock %}
 
 {% block content %}
-<h1>Log In</h1>
+<h1>Sign in</h1>
+<p class="subtitle">Enter your email to continue</p>
 
 {% if let Some(err) = error %}
 <div class="error-msg">{{ err }}</div>
@@ -11,8 +12,8 @@
 
 <form method="POST" action="/login">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label for="email">Email</label>
-    <input type="email" id="email" name="email" required autocomplete="email" {% if let Some(e) = email %}value="{{ e }}"{% endif %}>
+    <label for="email">Email address</label>
+    <input type="email" id="email" name="email" required autocomplete="email" placeholder="name@example.com" {% if let Some(e) = email %}value="{{ e }}"{% endif %}>
 
     <div id="password-section">
         <label for="password">Password</label>
@@ -45,19 +46,12 @@
     {% endif %}
 
     <button type="button" id="continue-btn" class="btn btn-primary">Continue</button>
-    <button type="submit" id="password-login-btn" class="btn btn-primary">Log In</button>
+    <button type="submit" id="password-login-btn" class="btn btn-primary">Sign in</button>
 </form>
 
-<button type="button" id="passkey-btn" class="btn btn-secondary" style="display:none;">Use a Passkey</button>
+<button type="button" id="passkey-btn" class="btn btn-secondary" style="display:none; margin-top: 0.5rem;">Sign in with passkey</button>
 
 <div id="passkey-error" class="error-msg" style="display:none;"></div>
-
-<div class="link-row">
-    Don't have an account? <a href="/signup{% if !oauth_query.is_empty() %}?{{ oauth_query }}{% endif %}">Sign up</a>
-</div>
-<div class="link-row">
-    <a href="/recover">Forgot your password?</a>
-</div>
 
 <script>
 (function() {
@@ -236,7 +230,7 @@
 
         var originalText = continueBtn.textContent;
         continueBtn.disabled = true;
-        continueBtn.textContent = 'Checking passkey...';
+        continueBtn.textContent = 'Checking\u2026';
         try {
             btn.style.display = 'block';
             await runPasskeyAuth(emailValue);
@@ -263,7 +257,7 @@
 
         var originalText = btn.textContent;
         btn.disabled = true;
-        btn.textContent = 'Waiting for passkey...';
+        btn.textContent = 'Waiting for passkey\u2026';
         try {
             await runPasskeyAuth(emailValue);
         } catch (e) {
@@ -294,4 +288,13 @@
     });
 })();
 </script>
+{% endblock %}
+
+{% block footer %}
+<div class="footer-links">
+    Don't have an account? <a href="/signup{% if !oauth_query.is_empty() %}?{{ oauth_query }}{% endif %}">Create account</a>
+</div>
+<div class="footer-links">
+    <a href="/recover">Forgot password?</a>
+</div>
 {% endblock %}

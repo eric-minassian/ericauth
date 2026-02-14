@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}Account Recovery — EricAuth{% endblock %}
+{% block title %}Account recovery — EricAuth{% endblock %}
 
 {% block content %}
-<h1>Account Recovery</h1>
+<h1>Account recovery</h1>
+<p class="subtitle">Use a recovery code to access your account</p>
 
 {% if let Some(err) = error %}
 <div class="error-msg">{{ err }}</div>
@@ -11,17 +12,19 @@
 
 <form method="POST" action="/recover">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label for="email">Email</label>
-    <input type="email" id="email" name="email" required autocomplete="email" {% if let Some(e) = email %}value="{{ e }}"{% endif %}>
+    <label for="email">Email address</label>
+    <input type="email" id="email" name="email" required autocomplete="email" placeholder="name@example.com" {% if let Some(e) = email %}value="{{ e }}"{% endif %}>
 
-    <label for="recovery_code">Recovery Code</label>
+    <label for="recovery_code">Recovery code</label>
     <input type="text" id="recovery_code" name="recovery_code" required autocomplete="off"
            placeholder="e.g. ABCD1234" style="font-family: 'SF Mono', 'Fira Code', monospace; letter-spacing: 0.05em;">
 
-    <button type="submit" class="btn btn-primary">Recover Account</button>
+    <button type="submit" class="btn btn-primary">Recover account</button>
 </form>
+{% endblock %}
 
-<div class="link-row">
-    Remember your password? <a href="/login">Log in</a>
+{% block footer %}
+<div class="footer-links">
+    Remember your password? <a href="/login">Sign in</a>
 </div>
 {% endblock %}

@@ -1,69 +1,60 @@
 {% extends "base.html" %}
 
-{% block title %}Manage Passkeys — EricAuth{% endblock %}
+{% block title %}Passkeys — EricAuth{% endblock %}
 
 {% block head %}
 <style>
     .passkey-empty {
         color: #71717a;
-        margin-bottom: 1rem;
-        font-size: 0.875rem;
+        margin-bottom: 1.25rem;
+        font-size: 0.8125rem;
         line-height: 1.6;
     }
-    .passkey-list { list-style: none; margin-bottom: 1.5rem; }
+    .passkey-list { list-style: none; margin-bottom: 1.25rem; }
     .passkey-item {
         display: flex;
         justify-content: space-between;
         align-items: center;
         padding: 0.75rem 0;
-        border-bottom: 1px solid #27272a;
+        border-bottom: 1px solid #25252b;
     }
-    .passkey-info { display: flex; flex-direction: column; }
-    .passkey-date { font-size: 0.75rem; color: #52525b; }
-    .passkey-delete { margin: 0; }
-    .btn-small {
-        padding: 0.25rem 0.75rem;
-        font-size: 0.8rem;
-        width: auto;
-    }
-    .logout-form { margin-top: 0.5rem; }
+    .passkey-item:first-child { border-top: 1px solid #25252b; }
+    .passkey-name { font-size: 0.875rem; font-weight: 500; color: #e4e4e7; }
+    .passkey-date { font-size: 0.75rem; color: #52525b; margin-top: 0.125rem; }
 </style>
 {% endblock %}
 
 {% block content %}
 <h1>Passkeys</h1>
+<p class="subtitle">Manage your passkeys for passwordless sign-in</p>
 
 {% if passkeys.is_empty() %}
 <p class="passkey-empty">
-    You haven't registered any passkeys yet. Passkeys let you sign in
-    securely without a password using your device's biometrics or security key.
+    No passkeys registered. Passkeys let you sign in securely using your
+    device's biometrics or security key.
 </p>
 {% else %}
 <ul class="passkey-list">
     {% for pk in &passkeys %}
     <li class="passkey-item">
-        <div class="passkey-info">
-            <strong>{{ pk.name }}</strong>
-            <span class="passkey-date">Added {{ pk.created_at }}</span>
+        <div>
+            <div class="passkey-name">{{ pk.name }}</div>
+            <div class="passkey-date">Added {{ pk.created_at }}</div>
         </div>
-        <form method="POST" action="/passkeys/delete" class="passkey-delete">
+        <form method="POST" action="/passkeys/delete">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="credential_id" value="{{ pk.credential_id }}">
-            <button type="submit" class="btn-small btn-danger">Remove</button>
+            <button type="submit" class="btn btn-danger btn-sm">Remove</button>
         </form>
     </li>
     {% endfor %}
 </ul>
 {% endif %}
 
-<button type="button" id="register-btn" class="btn btn-primary">Register New Passkey</button>
+<button type="button" id="register-btn" class="btn btn-primary">Add passkey</button>
 
-<div id="passkey-error" class="error-msg" style="display:none;"></div>
-<div id="passkey-success" class="success-msg" style="display:none;"></div>
-
-<form method="POST" action="/logout" class="logout-form">
-    <button type="submit" class="btn btn-secondary">Log Out</button>
-</form>
+<div id="passkey-error" class="error-msg" style="display:none; margin-top: 0.75rem;"></div>
+<div id="passkey-success" class="success-msg" style="display:none; margin-top: 0.75rem;"></div>
 
 <script>
 (function() {
@@ -142,4 +133,8 @@
     });
 })();
 </script>
+{% endblock %}
+
+{% block footer %}
+<div class="footer-links"><a href="/account">Back to account</a></div>
 {% endblock %}

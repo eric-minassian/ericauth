@@ -1,20 +1,21 @@
 {% extends "base.html" %}
 
-{% block title %}Sign Up — EricAuth{% endblock %}
+{% block title %}Create account — EricAuth{% endblock %}
 
 {% block head %}
 <style>
     .password-reqs {
-        font-size: 0.8rem;
-        color: #71717a;
-        margin: -0.5rem 0 1rem 1.25rem;
+        font-size: 0.75rem;
+        color: #52525b;
+        margin: -0.5rem 0 1rem 1.125rem;
+        line-height: 1.7;
     }
-    .password-reqs li { margin-bottom: 0.15rem; }
 </style>
 {% endblock %}
 
 {% block content %}
-<h1>Sign Up</h1>
+<h1>Create account</h1>
+<p class="subtitle">Enter your details below</p>
 
 {% if let Some(err) = error %}
 <div class="error-msg">{{ err }}</div>
@@ -47,13 +48,13 @@
     <input type="hidden" name="nonce" value="{{ n }}">
     {% endif %}
 
-    <label for="email">Email</label>
-    <input type="email" id="email" name="email" required autocomplete="email" {% if let Some(e) = email %}value="{{ e }}"{% endif %}>
+    <label for="email">Email address</label>
+    <input type="email" id="email" name="email" required autocomplete="email" placeholder="name@example.com" {% if let Some(e) = email %}value="{{ e }}"{% endif %}>
 
     <label for="password">Password</label>
     <input type="password" id="password" name="password" required autocomplete="new-password">
 
-    <label for="confirm_password">Confirm Password</label>
+    <label for="confirm_password">Confirm password</label>
     <input type="password" id="confirm_password" name="confirm_password" required autocomplete="new-password">
 
     <ul class="password-reqs">
@@ -65,12 +66,8 @@
 
     <div id="password-error" class="error-msg" style="display:none;"></div>
 
-    <button type="submit" class="btn btn-primary">Sign Up</button>
+    <button type="submit" class="btn btn-primary">Create account</button>
 </form>
-
-<div class="link-row">
-    Already have an account? <a href="/login{% if !oauth_query.is_empty() %}?{{ oauth_query }}{% endif %}">Log in</a>
-</div>
 
 <script>
 document.getElementById('signup-form').addEventListener('submit', function(e) {
@@ -86,4 +83,10 @@ document.getElementById('signup-form').addEventListener('submit', function(e) {
     }
 });
 </script>
+{% endblock %}
+
+{% block footer %}
+<div class="footer-links">
+    Already have an account? <a href="/login{% if !oauth_query.is_empty() %}?{{ oauth_query }}{% endif %}">Sign in</a>
+</div>
 {% endblock %}

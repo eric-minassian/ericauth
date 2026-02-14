@@ -12,8 +12,8 @@ importers:
         specifier: 2.177.0
         version: 2.177.0(constructs@10.4.5)
       cargo-lambda-cdk:
-        specifier: ^0.0.31
-        version: 0.0.31(aws-cdk-lib@2.177.0(constructs@10.4.5))(constructs@10.4.5)
+        specifier: ^0.0.33
+        version: 0.0.33(aws-cdk-lib@2.177.0(constructs@10.4.5))(constructs@10.4.5)
       constructs:
         specifier: ^10.0.0
         version: 10.4.5
@@ -506,8 +506,8 @@ packages:
   caniuse-lite@1.0.30001765:
     resolution: {integrity: sha512-LWcNtSyZrakjECqmpP4qdg0MMGdN368D7X8XvvAqOcqMv0RxnlqVKZl2V6/mBR68oYMxOZPLw/gO7DuisMHUvQ==}
 
-  cargo-lambda-cdk@0.0.31:
-    resolution: {integrity: sha512-DUHRl9VVLlMagHsgDLjJWXOWzEWTGQQ3FzVLHuJRDXAL5wOAtaEDvemwcAuCi4swmkA6FoyN3Z8P5lPs4a5EVw==}
+  cargo-lambda-cdk@0.0.33:
+    resolution: {integrity: sha512-1N9BXaHk/jnESY+YduOqMpoJkd/qiAMqpZbgGDIGzIIz2KIxziWeZx4DWEFNGTZbczRrmryMkcef6PjKO6cE3w==}
     peerDependencies:
       aws-cdk-lib: ^2.63.0
       constructs: ^10.0.5
@@ -687,7 +687,7 @@ packages:
 
   glob@7.2.3:
     resolution: {integrity: sha512-nFR0zLpU2YCaRxwoCJvL6UvCH2JFyFVIvwTLsIf21AuHlMskA1hhTdk+LlYJtOlYt9v6dvszD2BGRqBL+iQK9Q==}
-    deprecated: Glob versions prior to v9 are no longer supported
+    deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
@@ -1906,7 +1906,7 @@ snapshots:
 
   caniuse-lite@1.0.30001765: {}
 
-  cargo-lambda-cdk@0.0.31(aws-cdk-lib@2.177.0(constructs@10.4.5))(constructs@10.4.5):
+  cargo-lambda-cdk@0.0.33(aws-cdk-lib@2.177.0(constructs@10.4.5))(constructs@10.4.5):
     dependencies:
       aws-cdk-lib: 2.177.0(constructs@10.4.5)
       constructs: 10.4.5

@@ -49,72 +49,9 @@ jobs:
         env:
           ENCRYPTION_KEY: "01234567890123456789012345678901"
 
-      - name: Build app binary for E2E cache reuse
-        run: cargo build --all-features
-
-  e2e:
-    name: E2E (Playwright)
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.93.1
-
-      - name: Install cargo-lambda
-        run: pip install cargo-lambda
-
-      - name: Cache cargo registry & build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "pnpm"
-          cache-dependency-path: tests/e2e/pnpm-lock.yaml
-
-      - name: Install E2E dependencies
-        run: pnpm install --frozen-lockfile
-        working-directory: tests/e2e
-
-      - name: Install Playwright browser
-        run: pnpm exec playwright install --with-deps chromium
-        working-directory: tests/e2e
-
-      - name: Run E2E tests
-        run: pnpm test -- --forbid-only
-        working-directory: tests/e2e
-
-      - name: Upload Playwright artifacts on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-artifacts-main
-          path: |
-            /tmp/ericauth-playwright-results
-            tests/e2e/playwright-report
-          if-no-files-found: ignore
-
   deploy-beta:
     name: Deploy to Beta
-    needs: [test, e2e]
+    needs: test
     runs-on: ubuntu-latest
     environment: beta
     outputs:
@@ -177,6 +114,13 @@ jobs:
           print(f"api_url={outputs['EricAuth-Beta']['ApiUrl']}")
           PY
 
+      - name: Upload CDK assembly for Prod deploy reuse
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdk-assembly
+          path: cdk/cdk.out
+          if-no-files-found: error
+
   e2e-beta:
     name: E2E (Beta)
     needs: deploy-beta
@@ -230,30 +174,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download CDK assembly from Beta deploy
+        uses: actions/download-artifact@v4
+        with:
+          name: cdk-assembly
+          path: cdk/cdk.out
+
       - name: Configure AWS credentials (Prod)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.93.1
-
-      - name: Install cargo-lambda
-        run: pip install cargo-lambda
-
-      - name: Cache cargo registry & build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-lambda-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-lambda-
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -272,7 +203,7 @@ jobs:
         working-directory: cdk
 
       - name: CDK Deploy (Prod)
-        run: pnpm cdk deploy EricAuth-Prod --require-approval never --outputs-file cdk-outputs.json
+        run: pnpm cdk deploy --app cdk.out EricAuth-Prod --require-approval never --outputs-file cdk-outputs.json
         working-directory: cdk
 
       - name: Capture Prod API URL

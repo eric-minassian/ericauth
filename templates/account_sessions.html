@@ -1,9 +1,43 @@
 {% extends "base.html" %}
 
-{% block title %}Sessions - EricAuth{% endblock %}
+{% block title %}Sessions — EricAuth{% endblock %}
+
+{% block head %}
+<style>
+    .session-list { display: flex; flex-direction: column; gap: 0.75rem; }
+    .session-card {
+        border: 1px solid #25252b;
+        border-radius: 8px;
+        padding: 0.875rem;
+    }
+    .session-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+    .session-device { font-weight: 500; font-size: 0.875rem; color: #e4e4e7; }
+    .session-badge {
+        font-size: 0.6875rem;
+        font-weight: 500;
+        color: #7c3aed;
+        background: rgba(124,58,237,0.1);
+        border: 1px solid rgba(124,58,237,0.2);
+        padding: 0.125rem 0.5rem;
+        border-radius: 999px;
+    }
+    .session-meta {
+        font-size: 0.75rem;
+        color: #71717a;
+        line-height: 1.7;
+    }
+    .session-revoke { margin-top: 0.625rem; }
+</style>
+{% endblock %}
 
 {% block content %}
-<h1>Session Management</h1>
+<h1>Sessions</h1>
+<p class="subtitle">Manage your active sessions</p>
 
 {% if let Some(msg) = notice %}
 <div class="success-msg">{{ msg }}</div>
@@ -12,30 +46,36 @@
 <div class="error-msg">{{ msg }}</div>
 {% endif %}
 
-<form method="POST" action="/account/sessions/revoke-others">
+<form method="POST" action="/account/sessions/revoke-others" style="margin-bottom: 1.25rem;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="btn btn-secondary">Sign Out Other Devices</button>
+    <button type="submit" class="btn btn-secondary">Sign out all other devices</button>
 </form>
 
-<div style="margin-top: 0.9rem; display: grid; gap: 0.75rem;">
+<div class="session-list">
     {% for session in &sessions %}
-    <div style="border: 1px solid #27272a; border-radius: 6px; padding: 0.75rem;">
-        <p style="font-weight: 600; margin-bottom: 0.4rem;">{{ session.device_name }} {% if session.is_current %}(Current){% endif %}</p>
-        <p style="font-size: 0.82rem; color: #a1a1aa; margin-bottom: 0.2rem;">IP: {{ session.ip_address }}</p>
-        <p style="font-size: 0.82rem; color: #a1a1aa; margin-bottom: 0.2rem;">Started: {{ session.created_at }}</p>
-        <p style="font-size: 0.82rem; color: #a1a1aa; margin-bottom: 0.2rem;">Last active: {{ session.last_seen_at }}</p>
-        <p style="font-size: 0.82rem; color: #a1a1aa;">Expires: {{ session.expires_at }}</p>
-
+    <div class="session-card">
+        <div class="session-header">
+            <span class="session-device">{{ session.device_name }}</span>
+            {% if session.is_current %}<span class="session-badge">Current</span>{% endif %}
+        </div>
+        <div class="session-meta">
+            {{ session.ip_address }}<br>
+            Started {{ session.created_at }}<br>
+            Last active {{ session.last_seen_at }}<br>
+            Expires {{ session.expires_at }}
+        </div>
         {% if !session.is_current %}
-        <form method="POST" action="/account/sessions/revoke">
+        <form method="POST" action="/account/sessions/revoke" class="session-revoke">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="session_id" value="{{ session.id }}">
-            <button type="submit" class="btn btn-danger">Sign Out This Device</button>
+            <button type="submit" class="btn btn-danger btn-sm">Revoke</button>
         </form>
         {% endif %}
     </div>
     {% endfor %}
 </div>
+{% endblock %}
 
-<div class="link-row"><a href="/account">Back to account</a></div>
+{% block footer %}
+<div class="footer-links"><a href="/account">Back to account</a></div>
 {% endblock %}

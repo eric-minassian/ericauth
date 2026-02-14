@@ -1,9 +1,37 @@
 {% extends "base.html" %}
 
-{% block title %}Account - EricAuth{% endblock %}
+{% block title %}Account — EricAuth{% endblock %}
+
+{% block head %}
+<style>
+    .nav-list { list-style: none; }
+    .nav-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 0;
+        border-top: 1px solid #25252b;
+        text-decoration: none;
+        color: #d4d4d8;
+        font-size: 0.875rem;
+        transition: color 0.15s;
+    }
+    a.nav-item:hover { color: #fafafa; }
+    .nav-item:last-child { border-bottom: 1px solid #25252b; }
+    .nav-value {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: 0.8125rem;
+        color: #52525b;
+    }
+    .nav-chevron { color: #3f3f46; flex-shrink: 0; }
+</style>
+{% endblock %}
 
 {% block content %}
-<h1>Account Security</h1>
+<h1>Account</h1>
+<p class="subtitle">{{ email }}</p>
 
 {% if let Some(msg) = notice %}
 <div class="success-msg">{{ msg }}</div>
@@ -12,27 +40,42 @@
 <div class="error-msg">{{ msg }}</div>
 {% endif %}
 
-<p style="font-size: 0.875rem; color: #a1a1aa; margin-bottom: 1rem;">
-    Signed in as <strong>{{ email }}</strong>
-</p>
+<nav>
+    <ul class="nav-list">
+        <li><a href="/passkeys/manage" class="nav-item">
+            <span>Passkeys</span>
+            <span class="nav-value">{{ passkey_count }}
+                <svg class="nav-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </span>
+        </a></li>
+        <li><a href="/account/sessions" class="nav-item">
+            <span>Active sessions</span>
+            <span class="nav-value">{{ session_count }}
+                <svg class="nav-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </span>
+        </a></li>
+        <li><a href="/account/password" class="nav-item">
+            <span>Password</span>
+            <span class="nav-value">{% if has_password_login %}Enabled{% else %}Disabled{% endif %}
+                <svg class="nav-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </span>
+        </a></li>
+        <li><div class="nav-item">
+            <span>Recovery codes</span>
+            <span class="nav-value">{{ recovery_codes_remaining }} remaining</span>
+        </div></li>
+    </ul>
+</nav>
 
-<div style="border: 1px solid #27272a; border-radius: 6px; padding: 0.75rem; margin-bottom: 1rem;">
-    <p style="font-size: 0.875rem; color: #d4d4d8; margin-bottom: 0.35rem;"><strong>Passkeys:</strong> {{ passkey_count }}</p>
-    <p style="font-size: 0.875rem; color: #d4d4d8; margin-bottom: 0.35rem;"><strong>Recovery codes:</strong> {{ recovery_codes_remaining }}</p>
-    <p style="font-size: 0.875rem; color: #d4d4d8; margin-bottom: 0.35rem;"><strong>Active sessions:</strong> {{ session_count }}</p>
-    <p style="font-size: 0.875rem; color: #d4d4d8;"><strong>Password login:</strong> {% if has_password_login %}Enabled{% else %}Disabled{% endif %}</p>
+<hr class="divider">
+
+<div class="actions">
+    <form method="POST" action="/account/recovery-codes/regenerate">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-secondary">Regenerate recovery codes</button>
+    </form>
+    <form method="POST" action="/logout">
+        <button type="submit" class="btn btn-secondary">Sign out</button>
+    </form>
 </div>
-
-<a class="btn btn-secondary" href="/passkeys/manage">Manage Passkeys</a>
-<a class="btn btn-secondary" href="/account/sessions">Manage Sessions</a>
-<a class="btn btn-secondary" href="/account/password">Change Password</a>
-
-<form method="POST" action="/account/recovery-codes/regenerate" style="margin-top: 0.75rem;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="btn btn-secondary">Regenerate Recovery Codes</button>
-</form>
-
-<form method="POST" action="/logout">
-    <button type="submit" class="btn btn-primary" style="margin-top: 0.75rem;">Log Out</button>
-</form>
 {% endblock %}

@@ -45,6 +45,7 @@ export class EricAuthStack extends Stack {
       emailVerificationsTable: database.emailVerificationsTable,
       passwordResetsTable: database.passwordResetsTable,
       refreshTokensTable: database.refreshTokensTable,
+      apiKeysTable: database.apiKeysTable,
       auditEventsTable: database.auditEventsTable,
       credentialsTable: database.credentialsTable,
       challengesTable: database.challengesTable,

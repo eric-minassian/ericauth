@@ -15,6 +15,7 @@ interface LambdaProps {
   emailVerificationsTable: TableV2;
   passwordResetsTable: TableV2;
   refreshTokensTable: TableV2;
+  apiKeysTable: TableV2;
   auditEventsTable: TableV2;
   credentialsTable: TableV2;
   challengesTable: TableV2;
@@ -44,6 +45,8 @@ export class Lambda extends Construct {
         EMAIL_VERIFICATIONS_TABLE_NAME: props.emailVerificationsTable.tableName,
         PASSWORD_RESETS_TABLE_NAME: props.passwordResetsTable.tableName,
         REFRESH_TOKENS_TABLE_NAME: props.refreshTokensTable.tableName,
+        API_KEYS_TABLE_NAME: props.apiKeysTable.tableName,
+        API_KEYS_USER_ID_INDEX_NAME: GSI_NAMES.USER_ID_INDEX,
         AUDIT_EVENTS_TABLE_NAME: props.auditEventsTable.tableName,
         CREDENTIALS_TABLE_NAME: props.credentialsTable.tableName,
         CHALLENGES_TABLE_NAME: props.challengesTable.tableName,
@@ -61,6 +64,7 @@ export class Lambda extends Construct {
     props.emailVerificationsTable.grantReadWriteData(this.handler);
     props.passwordResetsTable.grantReadWriteData(this.handler);
     props.refreshTokensTable.grantReadWriteData(this.handler);
+    props.apiKeysTable.grantReadWriteData(this.handler);
     props.auditEventsTable.grantReadWriteData(this.handler);
     props.credentialsTable.grantReadWriteData(this.handler);
     props.challengesTable.grantReadWriteData(this.handler);

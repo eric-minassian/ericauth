@@ -20,6 +20,7 @@ use super::password_reset::PasswordResetTable;
 use super::refresh_token::RefreshTokenTable;
 use super::session::NewSession;
 use super::session::SessionTable;
+use super::tenant::{ProjectTable, TenantTable};
 use super::user::UserTable;
 
 /// In-memory challenge record.
@@ -48,6 +49,7 @@ struct MemoryDbSnapshot {
     credentials: HashMap<String, CredentialTable>,
     challenges: HashMap<String, ChallengeRecord>,
     clients: HashMap<String, ClientTable>,
+    tenants: HashMap<String, TenantTable>,
     auth_codes: HashMap<String, AuthCodeTable>,
     rate_limits: HashMap<String, RateLimitRecord>,
 }
@@ -65,6 +67,7 @@ pub struct MemoryDb {
     credentials: Arc<RwLock<HashMap<String, CredentialTable>>>,
     challenges: Arc<RwLock<HashMap<String, ChallengeRecord>>>,
     clients: Arc<RwLock<HashMap<String, ClientTable>>>,
+    tenants: Arc<RwLock<HashMap<String, TenantTable>>>,
     auth_codes: Arc<RwLock<HashMap<String, AuthCodeTable>>>,
     rate_limits: Arc<RwLock<HashMap<String, RateLimitRecord>>>,
     persistence_path: Option<PathBuf>,
@@ -94,6 +97,7 @@ impl MemoryDb {
             credentials: Arc::new(RwLock::new(snapshot.credentials)),
             challenges: Arc::new(RwLock::new(snapshot.challenges)),
             clients: Arc::new(RwLock::new(snapshot.clients)),
+            tenants: Arc::new(RwLock::new(snapshot.tenants)),
             auth_codes: Arc::new(RwLock::new(snapshot.auth_codes)),
             rate_limits: Arc::new(RwLock::new(snapshot.rate_limits)),
             persistence_path,
@@ -164,6 +168,11 @@ impl MemoryDb {
                 .clone(),
             clients: self
                 .clients
+                .read()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
+                .clone(),
+            tenants: self
+                .tenants
                 .read()
                 .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
                 .clone(),
@@ -879,6 +888,40 @@ impl MemoryDb {
         Ok(clients.get(client_id).cloned())
     }
 
+    pub async fn get_client_for_tenant(
+        &self,
+        tenant_id: Option<&str>,
+        client_id: &str,
+    ) -> Result<Option<ClientTable>, AuthError> {
+        let Some(client) = self.get_client(client_id).await? else {
+            return Ok(None);
+        };
+
+        let Some(tenant_id) = tenant_id else {
+            return Ok(Some(client));
+        };
+
+        let tenants = self
+            .tenants
+            .read()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        let Some(tenant) = tenants.get(tenant_id) else {
+            return Ok(None);
+        };
+
+        let in_tenant = tenant
+            .projects
+            .iter()
+            .any(|project| project.client_ids.iter().any(|id| id == client_id));
+
+        if in_tenant {
+            Ok(Some(client))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Insert a client (for testing purposes).
     pub async fn insert_client(&self, client: ClientTable) -> Result<(), AuthError> {
         {
@@ -887,6 +930,86 @@ impl MemoryDb {
                 .write()
                 .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
             clients.insert(client.client_id.clone(), client);
+        }
+
+        self.persist_if_configured()?;
+        Ok(())
+    }
+
+    pub async fn insert_tenant(&self, tenant: TenantTable) -> Result<(), AuthError> {
+        {
+            let mut tenants = self
+                .tenants
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+            if tenants.contains_key(&tenant.tenant_id) {
+                return Err(AuthError::Conflict("tenant already exists".to_string()));
+            }
+
+            tenants.insert(tenant.tenant_id.clone(), tenant);
+        }
+
+        self.persist_if_configured()?;
+        Ok(())
+    }
+
+    pub async fn list_tenants(&self) -> Result<Vec<TenantTable>, AuthError> {
+        let tenants = self
+            .tenants
+            .read()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        let mut result = tenants.values().cloned().collect::<Vec<_>>();
+        result.sort_by(|a, b| a.tenant_id.cmp(&b.tenant_id));
+        Ok(result)
+    }
+
+    pub async fn get_tenant(&self, tenant_id: &str) -> Result<Option<TenantTable>, AuthError> {
+        let tenants = self
+            .tenants
+            .read()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+        Ok(tenants.get(tenant_id).cloned())
+    }
+
+    pub async fn delete_tenant(&self, tenant_id: &str) -> Result<(), AuthError> {
+        {
+            let mut tenants = self
+                .tenants
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+            tenants.remove(tenant_id);
+        }
+
+        self.persist_if_configured()?;
+        Ok(())
+    }
+
+    pub async fn add_project_to_tenant(
+        &self,
+        tenant_id: &str,
+        project: ProjectTable,
+    ) -> Result<(), AuthError> {
+        {
+            let mut tenants = self
+                .tenants
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+            let tenant = tenants
+                .get_mut(tenant_id)
+                .ok_or_else(|| AuthError::NotFound("tenant not found".to_string()))?;
+
+            if tenant
+                .projects
+                .iter()
+                .any(|existing| existing.project_id == project.project_id)
+            {
+                return Err(AuthError::Conflict("project already exists".to_string()));
+            }
+
+            tenant.projects.push(project);
         }
 
         self.persist_if_configured()?;

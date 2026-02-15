@@ -19,6 +19,7 @@
             padding: 1.5rem;
         }
         .container { width: 100%; max-width: 420px; }
+        .container-wide { max-width: 960px; }
         .brand {
             text-align: center;
             margin-bottom: 1.75rem;
@@ -145,7 +146,7 @@
     {% block head %}{% endblock %}
 </head>
 <body>
-    <div class="container">
+    <div class="container {% block container_class %}{% endblock %}">
         <div class="brand">
             <div class="brand-name">EricAuth</div>
         </div>

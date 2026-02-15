@@ -1,4 +1,6 @@
 mod account;
+mod admin_pages;
+mod admin_tenants;
 mod audit_events;
 pub(crate) mod authorize;
 mod compliance;
@@ -129,6 +131,35 @@ pub fn router(state: AppState) -> Router {
 
     // All other routes (no rate limit, no CORS)
     let other_routes = Router::new()
+        .route(
+            "/admin/tenants",
+            get(admin_tenants::list_tenants_handler).post(admin_tenants::create_tenant_handler),
+        )
+        .route(
+            "/admin/tenants/{tenant_id}",
+            get(admin_tenants::get_tenant_handler).delete(admin_tenants::delete_tenant_handler),
+        )
+        .route(
+            "/admin/tenants/{tenant_id}/projects",
+            post(admin_tenants::create_project_handler),
+        )
+        .route(
+            "/admin/tenants/{tenant_id}/clients/{client_id}",
+            get(admin_tenants::get_tenant_client_handler),
+        )
+        .route(
+            "/admin/console/tenants",
+            get(admin_pages::tenants_page_handler).post(admin_pages::create_tenant_handler),
+        )
+        .route(
+            "/admin/console/clients",
+            get(admin_pages::clients_page_handler),
+        )
+        .route("/admin/console/users", get(admin_pages::users_page_handler))
+        .route(
+            "/admin/console/policies",
+            get(admin_pages::policies_page_handler),
+        )
         .route("/favicon.ico", get(favicon::handler))
         .route("/health", get(health::handler))
         .route("/logout", post(logout::handler))

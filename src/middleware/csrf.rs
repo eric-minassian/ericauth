@@ -27,6 +27,7 @@ const CSRF_PROTECTED_PATHS: &[&str] = &[
     "/account/sessions/revoke-others",
     "/account/password",
     "/account/recovery-codes/regenerate",
+    "/admin/console/tenants",
 ];
 
 /// CSRF token stored in request extensions so handlers can pass it to templates.

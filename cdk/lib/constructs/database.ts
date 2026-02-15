@@ -15,6 +15,7 @@ export class Database extends Construct {
   public readonly credentialsTable: TableV2;
   public readonly challengesTable: TableV2;
   public readonly clientsTable: TableV2;
+  public readonly tenantsTable: TableV2;
   public readonly authCodesTable: TableV2;
   public readonly rateLimitsTable: TableV2;
 
@@ -87,6 +88,12 @@ export class Database extends Construct {
     this.clientsTable = new TableV2(this, "ClientsTable", {
       tableName: `${prefix}-clients`,
       partitionKey: { name: "client_id", type: AttributeType.STRING },
+      removalPolicy,
+    });
+
+    this.tenantsTable = new TableV2(this, "TenantsTable", {
+      tableName: `${prefix}-tenants`,
+      partitionKey: { name: "tenant_id", type: AttributeType.STRING },
       removalPolicy,
     });
 

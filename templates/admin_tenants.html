@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Admin - Tenants - EricAuth{% endblock %}
+{% block container_class %}container-wide{% endblock %}
+
+{% block head %}
+<style>
+    .admin-nav {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+    }
+    .admin-nav .btn { width: auto; }
+    .admin-grid {
+        display: grid;
+        gap: 1.25rem;
+        grid-template-columns: 1fr;
+    }
+    .section-title {
+        font-size: 0.95rem;
+        color: #fafafa;
+        margin-bottom: 0.625rem;
+    }
+    .tenant-list { list-style: none; border: 1px solid #25252b; border-radius: 8px; }
+    .tenant-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.625rem 0.75rem;
+        border-top: 1px solid #25252b;
+    }
+    .tenant-item:first-child { border-top: 0; }
+    .tenant-id { color: #fafafa; font-size: 0.875rem; }
+    .tenant-name { color: #a1a1aa; font-size: 0.8125rem; }
+    @media (min-width: 720px) {
+        .admin-grid { grid-template-columns: minmax(0, 1fr) 320px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Admin Console</h1>
+<p class="subtitle">Tenants</p>
+
+{% if let Some(msg) = notice %}
+<div class="success-msg">{{ msg }}</div>
+{% endif %}
+{% if let Some(msg) = error %}
+<div class="error-msg">{{ msg }}</div>
+{% endif %}
+
+<nav class="admin-nav">
+    <a class="btn btn-secondary btn-sm" href="/admin/console/tenants">Tenants</a>
+    <a class="btn btn-secondary btn-sm" href="/admin/console/clients">Clients</a>
+    <a class="btn btn-secondary btn-sm" href="/admin/console/users">Users</a>
+    <a class="btn btn-secondary btn-sm" href="/admin/console/policies">Policies</a>
+</nav>
+
+<div class="admin-grid">
+    <section>
+        <h2 class="section-title">Tenant list</h2>
+        {% if tenants.len() == 0 %}
+        <p class="subtitle">No tenants created yet.</p>
+        {% else %}
+        <ul class="tenant-list">
+            {% for tenant in tenants %}
+            <li class="tenant-item">
+                <span class="tenant-id">{{ tenant.tenant_id }}</span>
+                <span class="tenant-name">{{ tenant.name }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </section>
+
+    <section>
+        <h2 class="section-title">Create tenant</h2>
+        <form method="POST" action="/admin/console/tenants">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label for="tenant_id">Tenant ID</label>
+            <input id="tenant_id" type="text" name="tenant_id" required>
+            <label for="name">Tenant Name</label>
+            <input id="name" type="text" name="name" required>
+            <button class="btn btn-primary" type="submit">Create tenant</button>
+        </form>
+    </section>
+</div>
+{% endblock %}

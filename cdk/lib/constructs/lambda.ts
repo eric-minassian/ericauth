@@ -17,6 +17,7 @@ interface LambdaProps {
   credentialsTable: TableV2;
   challengesTable: TableV2;
   clientsTable: TableV2;
+  tenantsTable: TableV2;
   authCodesTable: TableV2;
   rateLimitsTable: TableV2;
   jwtSecret: ISecret;
@@ -43,6 +44,7 @@ export class Lambda extends Construct {
         CREDENTIALS_TABLE_NAME: props.credentialsTable.tableName,
         CHALLENGES_TABLE_NAME: props.challengesTable.tableName,
         CLIENTS_TABLE_NAME: props.clientsTable.tableName,
+        TENANTS_TABLE_NAME: props.tenantsTable.tableName,
         AUTH_CODES_TABLE_NAME: props.authCodesTable.tableName,
         RATE_LIMITS_TABLE_NAME: props.rateLimitsTable.tableName,
         JWT_SECRET_ARN: props.jwtSecret.secretArn,
@@ -57,6 +59,7 @@ export class Lambda extends Construct {
     props.credentialsTable.grantReadWriteData(this.handler);
     props.challengesTable.grantReadWriteData(this.handler);
     props.clientsTable.grantReadData(this.handler);
+    props.tenantsTable.grantReadWriteData(this.handler);
     props.authCodesTable.grantReadWriteData(this.handler);
     props.rateLimitsTable.grantReadWriteData(this.handler);
     props.jwtSecret.grantRead(this.handler);

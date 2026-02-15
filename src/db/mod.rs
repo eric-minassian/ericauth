@@ -9,6 +9,7 @@ pub mod password_reset;
 pub mod rate_limit;
 pub mod refresh_token;
 pub mod session;
+pub mod tenant;
 pub mod user;
 
 use std::env;
@@ -27,6 +28,7 @@ use self::email_verification::EmailVerificationTable;
 use self::password_reset::PasswordResetTable;
 use self::refresh_token::RefreshTokenTable;
 use self::session::{NewSession, SessionTable};
+use self::tenant::{ProjectTable, TenantTable};
 use self::user::UserTable;
 
 /// Database abstraction trait for storage backends.
@@ -145,7 +147,23 @@ pub trait Database: Send + Sync {
 
     // Client operations
     async fn get_client(&self, client_id: &str) -> Result<Option<ClientTable>, AuthError>;
+    async fn get_client_for_tenant(
+        &self,
+        tenant_id: Option<&str>,
+        client_id: &str,
+    ) -> Result<Option<ClientTable>, AuthError>;
     async fn insert_client(&self, client: ClientTable) -> Result<(), AuthError>;
+
+    // Tenant operations
+    async fn insert_tenant(&self, tenant: TenantTable) -> Result<(), AuthError>;
+    async fn list_tenants(&self) -> Result<Vec<TenantTable>, AuthError>;
+    async fn get_tenant(&self, tenant_id: &str) -> Result<Option<TenantTable>, AuthError>;
+    async fn delete_tenant(&self, tenant_id: &str) -> Result<(), AuthError>;
+    async fn add_project_to_tenant(
+        &self,
+        tenant_id: &str,
+        project: ProjectTable,
+    ) -> Result<(), AuthError>;
 
     // Auth code operations
     async fn insert_auth_code(&self, auth_code: &AuthCodeTable) -> Result<(), AuthError>;
@@ -174,6 +192,7 @@ pub struct DynamoDb {
     pub credentials_user_id_index: String,
     pub challenges_table: String,
     pub clients_table: String,
+    pub tenants_table: String,
     pub auth_codes_table: String,
     pub rate_limits_table: String,
     pub audit_events_table: String,
@@ -392,6 +411,38 @@ impl Database for DynamoDb {
         Err(AuthError::Internal(
             "insert_client not supported on DynamoDB backend".into(),
         ))
+    }
+
+    async fn get_client_for_tenant(
+        &self,
+        tenant_id: Option<&str>,
+        client_id: &str,
+    ) -> Result<Option<ClientTable>, AuthError> {
+        DynamoDb::get_client_for_tenant(self, tenant_id, client_id).await
+    }
+
+    async fn insert_tenant(&self, tenant: TenantTable) -> Result<(), AuthError> {
+        DynamoDb::insert_tenant(self, tenant).await
+    }
+
+    async fn list_tenants(&self) -> Result<Vec<TenantTable>, AuthError> {
+        DynamoDb::list_tenants(self).await
+    }
+
+    async fn get_tenant(&self, tenant_id: &str) -> Result<Option<TenantTable>, AuthError> {
+        DynamoDb::get_tenant(self, tenant_id).await
+    }
+
+    async fn delete_tenant(&self, tenant_id: &str) -> Result<(), AuthError> {
+        DynamoDb::delete_tenant(self, tenant_id).await
+    }
+
+    async fn add_project_to_tenant(
+        &self,
+        tenant_id: &str,
+        project: ProjectTable,
+    ) -> Result<(), AuthError> {
+        DynamoDb::add_project_to_tenant(self, tenant_id, project).await
     }
 
     async fn insert_auth_code(&self, auth_code: &AuthCodeTable) -> Result<(), AuthError> {
@@ -629,6 +680,38 @@ impl Database for memory::MemoryDb {
         memory::MemoryDb::insert_client(self, client).await
     }
 
+    async fn get_client_for_tenant(
+        &self,
+        tenant_id: Option<&str>,
+        client_id: &str,
+    ) -> Result<Option<ClientTable>, AuthError> {
+        memory::MemoryDb::get_client_for_tenant(self, tenant_id, client_id).await
+    }
+
+    async fn insert_tenant(&self, tenant: TenantTable) -> Result<(), AuthError> {
+        memory::MemoryDb::insert_tenant(self, tenant).await
+    }
+
+    async fn list_tenants(&self) -> Result<Vec<TenantTable>, AuthError> {
+        memory::MemoryDb::list_tenants(self).await
+    }
+
+    async fn get_tenant(&self, tenant_id: &str) -> Result<Option<TenantTable>, AuthError> {
+        memory::MemoryDb::get_tenant(self, tenant_id).await
+    }
+
+    async fn delete_tenant(&self, tenant_id: &str) -> Result<(), AuthError> {
+        memory::MemoryDb::delete_tenant(self, tenant_id).await
+    }
+
+    async fn add_project_to_tenant(
+        &self,
+        tenant_id: &str,
+        project: ProjectTable,
+    ) -> Result<(), AuthError> {
+        memory::MemoryDb::add_project_to_tenant(self, tenant_id, project).await
+    }
+
     async fn insert_auth_code(&self, auth_code: &AuthCodeTable) -> Result<(), AuthError> {
         memory::MemoryDb::insert_auth_code(self, auth_code).await
     }
@@ -677,6 +760,8 @@ pub async fn dynamo() -> Arc<dyn Database> {
             .unwrap_or_else(|_| "ChallengesTable".to_string()),
         clients_table: env::var("CLIENTS_TABLE_NAME")
             .unwrap_or_else(|_| "ClientsTable".to_string()),
+        tenants_table: env::var("TENANTS_TABLE_NAME")
+            .unwrap_or_else(|_| "TenantsTable".to_string()),
         auth_codes_table: env::var("AUTH_CODES_TABLE_NAME")
             .unwrap_or_else(|_| "AuthCodesTable".to_string()),
         rate_limits_table: env::var("RATE_LIMITS_TABLE_NAME")

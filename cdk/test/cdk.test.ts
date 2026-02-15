@@ -54,6 +54,15 @@ test("creates refresh tokens table with TTL", () => {
   });
 });
 
+test("creates tenants table", () => {
+  const template = createTestStack();
+
+  template.hasResourceProperties("AWS::DynamoDB::GlobalTable", {
+    TableName: "ericauth-test-tenants",
+    KeySchema: [{ AttributeName: "tenant_id", KeyType: "HASH" }],
+  });
+});
+
 test("creates exactly 9 DynamoDB tables", () => {
   const template = createTestStack();
   const tables = template.findResources("AWS::DynamoDB::GlobalTable");
@@ -71,6 +80,8 @@ test("creates Lambda function with table name env vars", () => {
         USERS_TABLE_NAME: Match.anyValue(),
         SESSIONS_TABLE_NAME: Match.anyValue(),
         REFRESH_TOKENS_TABLE_NAME: Match.anyValue(),
+        AUDIT_EVENTS_TABLE_NAME: Match.anyValue(),
+        TENANTS_TABLE_NAME: Match.anyValue(),
         AUDIT_EVENTS_TABLE_NAME: Match.anyValue(),
       }),
     },

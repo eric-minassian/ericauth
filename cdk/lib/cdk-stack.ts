@@ -42,6 +42,8 @@ export class EricAuthStack extends Stack {
     const lambda = new Lambda(this, "Lambda", {
       usersTable: database.usersTable,
       sessionsTable: database.sessionsTable,
+      emailVerificationsTable: database.emailVerificationsTable,
+      passwordResetsTable: database.passwordResetsTable,
       refreshTokensTable: database.refreshTokensTable,
       auditEventsTable: database.auditEventsTable,
       credentialsTable: database.credentialsTable,

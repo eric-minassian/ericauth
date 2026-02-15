@@ -12,6 +12,7 @@ use uuid::Uuid;
 use crate::audit::AuditEventRecord;
 use crate::error::AuthError;
 
+use super::api_key::ApiKeyTable;
 use super::auth_code::AuthCodeTable;
 use super::client::ClientTable;
 use super::credential::CredentialTable;
@@ -51,6 +52,7 @@ struct MemoryDbSnapshot {
     clients: HashMap<String, ClientTable>,
     tenants: HashMap<String, TenantTable>,
     auth_codes: HashMap<String, AuthCodeTable>,
+    api_keys: HashMap<String, ApiKeyTable>,
     rate_limits: HashMap<String, RateLimitRecord>,
 }
 
@@ -69,6 +71,7 @@ pub struct MemoryDb {
     clients: Arc<RwLock<HashMap<String, ClientTable>>>,
     tenants: Arc<RwLock<HashMap<String, TenantTable>>>,
     auth_codes: Arc<RwLock<HashMap<String, AuthCodeTable>>>,
+    api_keys: Arc<RwLock<HashMap<String, ApiKeyTable>>>,
     rate_limits: Arc<RwLock<HashMap<String, RateLimitRecord>>>,
     persistence_path: Option<PathBuf>,
 }
@@ -99,6 +102,7 @@ impl MemoryDb {
             clients: Arc::new(RwLock::new(snapshot.clients)),
             tenants: Arc::new(RwLock::new(snapshot.tenants)),
             auth_codes: Arc::new(RwLock::new(snapshot.auth_codes)),
+            api_keys: Arc::new(RwLock::new(snapshot.api_keys)),
             rate_limits: Arc::new(RwLock::new(snapshot.rate_limits)),
             persistence_path,
         }
@@ -178,6 +182,11 @@ impl MemoryDb {
                 .clone(),
             auth_codes: self
                 .auth_codes
+                .read()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
+                .clone(),
+            api_keys: self
+                .api_keys
                 .read()
                 .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
                 .clone(),
@@ -1063,6 +1072,73 @@ impl MemoryDb {
         }
 
         Ok(redeemed)
+    }
+
+    // --- API key operations ---
+
+    pub async fn insert_api_key(&self, api_key: &ApiKeyTable) -> Result<(), AuthError> {
+        {
+            let mut api_keys = self
+                .api_keys
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+            if api_keys.contains_key(&api_key.key_id) {
+                return Err(AuthError::Conflict("api key already exists".to_string()));
+            }
+
+            api_keys.insert(api_key.key_id.clone(), api_key.clone());
+        }
+
+        self.persist_if_configured()?;
+        Ok(())
+    }
+
+    pub async fn get_api_keys_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<ApiKeyTable>, AuthError> {
+        let api_keys = self
+            .api_keys
+            .read()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        Ok(api_keys
+            .values()
+            .filter(|api_key| api_key.user_id == user_id)
+            .cloned()
+            .collect())
+    }
+
+    pub async fn revoke_api_key(
+        &self,
+        key_id: &str,
+        user_id: &str,
+        revoked_at: &str,
+    ) -> Result<(), AuthError> {
+        {
+            let mut api_keys = self
+                .api_keys
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+            let api_key = api_keys
+                .get_mut(key_id)
+                .ok_or_else(|| AuthError::NotFound("api key not found".to_string()))?;
+
+            if api_key.user_id != user_id {
+                return Err(AuthError::NotFound("api key not found".to_string()));
+            }
+
+            if api_key.revoked_at.is_some() {
+                return Err(AuthError::NotFound("api key not found".to_string()));
+            }
+
+            api_key.revoked_at = Some(revoked_at.to_string());
+        }
+
+        self.persist_if_configured()?;
+        Ok(())
     }
 
     // --- Rate limit operations ---

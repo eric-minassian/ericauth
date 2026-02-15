@@ -1,5 +1,7 @@
 pub mod admin_rbac;
 pub mod audit;
+pub mod authz;
+pub mod client_credentials;
 pub mod db;
 pub mod encryption;
 pub mod error;

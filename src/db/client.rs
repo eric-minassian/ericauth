@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use aws_sdk_dynamodb::types::AttributeValue;
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +13,20 @@ pub struct ClientTable {
     pub redirect_uris: Vec<String>,
     pub allowed_scopes: Vec<String>,
     pub client_name: String,
+    #[serde(default)]
+    pub client_secret_hash: Option<String>,
+    #[serde(default = "default_token_endpoint_auth_method")]
+    pub token_endpoint_auth_method: String,
+}
+
+impl ClientTable {
+    pub fn allowed_scope_set(&self) -> HashSet<&str> {
+        self.allowed_scopes.iter().map(String::as_str).collect()
+    }
+}
+
+fn default_token_endpoint_auth_method() -> String {
+    "none".to_string()
 }
 
 impl DynamoDb {

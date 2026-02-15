@@ -304,6 +304,8 @@ mod tests {
                 redirect_uris: vec!["https://example.com/callback".to_string()],
                 allowed_scopes: vec!["openid".to_string()],
                 client_name: "Client A".to_string(),
+                client_secret_hash: None,
+                token_endpoint_auth_method: "none".to_string(),
             })
             .await
             .unwrap();
@@ -314,6 +316,8 @@ mod tests {
                 redirect_uris: vec!["https://example.com/callback".to_string()],
                 allowed_scopes: vec!["openid".to_string()],
                 client_name: "Client B".to_string(),
+                client_secret_hash: None,
+                token_endpoint_auth_method: "none".to_string(),
             })
             .await
             .unwrap();

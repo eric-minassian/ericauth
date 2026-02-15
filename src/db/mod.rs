@@ -1,3 +1,4 @@
+pub mod api_key;
 pub mod audit_event;
 pub mod auth_code;
 pub mod challenge;
@@ -21,6 +22,7 @@ use uuid::Uuid;
 use crate::audit::AuditEventRecord;
 use crate::error::AuthError;
 
+use self::api_key::ApiKeyTable;
 use self::auth_code::AuthCodeTable;
 use self::client::ClientTable;
 use self::credential::CredentialTable;
@@ -169,6 +171,16 @@ pub trait Database: Send + Sync {
     async fn insert_auth_code(&self, auth_code: &AuthCodeTable) -> Result<(), AuthError>;
     async fn redeem_auth_code(&self, code: &str) -> Result<Option<AuthCodeTable>, AuthError>;
 
+    // API key operations
+    async fn insert_api_key(&self, api_key: &ApiKeyTable) -> Result<(), AuthError>;
+    async fn get_api_keys_by_user_id(&self, user_id: &str) -> Result<Vec<ApiKeyTable>, AuthError>;
+    async fn revoke_api_key(
+        &self,
+        key_id: &str,
+        user_id: &str,
+        revoked_at: &str,
+    ) -> Result<(), AuthError>;
+
     // Rate limit operations
     async fn increment_rate_limit(&self, key: &str, window_seconds: i64) -> Result<i64, AuthError>;
 
@@ -194,6 +206,8 @@ pub struct DynamoDb {
     pub clients_table: String,
     pub tenants_table: String,
     pub auth_codes_table: String,
+    pub api_keys_table: String,
+    pub api_keys_user_id_index: String,
     pub rate_limits_table: String,
     pub audit_events_table: String,
 }
@@ -451,6 +465,23 @@ impl Database for DynamoDb {
 
     async fn redeem_auth_code(&self, code: &str) -> Result<Option<AuthCodeTable>, AuthError> {
         DynamoDb::redeem_auth_code(self, code).await
+    }
+
+    async fn insert_api_key(&self, api_key: &ApiKeyTable) -> Result<(), AuthError> {
+        DynamoDb::insert_api_key(self, api_key).await
+    }
+
+    async fn get_api_keys_by_user_id(&self, user_id: &str) -> Result<Vec<ApiKeyTable>, AuthError> {
+        DynamoDb::get_api_keys_by_user_id(self, user_id).await
+    }
+
+    async fn revoke_api_key(
+        &self,
+        key_id: &str,
+        user_id: &str,
+        revoked_at: &str,
+    ) -> Result<(), AuthError> {
+        DynamoDb::revoke_api_key(self, key_id, user_id, revoked_at).await
     }
 
     async fn increment_rate_limit(&self, key: &str, window_seconds: i64) -> Result<i64, AuthError> {
@@ -720,6 +751,23 @@ impl Database for memory::MemoryDb {
         memory::MemoryDb::redeem_auth_code(self, code).await
     }
 
+    async fn insert_api_key(&self, api_key: &ApiKeyTable) -> Result<(), AuthError> {
+        memory::MemoryDb::insert_api_key(self, api_key).await
+    }
+
+    async fn get_api_keys_by_user_id(&self, user_id: &str) -> Result<Vec<ApiKeyTable>, AuthError> {
+        memory::MemoryDb::get_api_keys_by_user_id(self, user_id).await
+    }
+
+    async fn revoke_api_key(
+        &self,
+        key_id: &str,
+        user_id: &str,
+        revoked_at: &str,
+    ) -> Result<(), AuthError> {
+        memory::MemoryDb::revoke_api_key(self, key_id, user_id, revoked_at).await
+    }
+
     async fn increment_rate_limit(&self, key: &str, window_seconds: i64) -> Result<i64, AuthError> {
         memory::MemoryDb::increment_rate_limit(self, key, window_seconds).await
     }
@@ -764,6 +812,10 @@ pub async fn dynamo() -> Arc<dyn Database> {
             .unwrap_or_else(|_| "TenantsTable".to_string()),
         auth_codes_table: env::var("AUTH_CODES_TABLE_NAME")
             .unwrap_or_else(|_| "AuthCodesTable".to_string()),
+        api_keys_table: env::var("API_KEYS_TABLE_NAME")
+            .unwrap_or_else(|_| "ApiKeysTable".to_string()),
+        api_keys_user_id_index: env::var("API_KEYS_USER_ID_INDEX_NAME")
+            .unwrap_or_else(|_| "userIdIndex".to_string()),
         rate_limits_table: env::var("RATE_LIMITS_TABLE_NAME")
             .unwrap_or_else(|_| "RateLimitsTable".to_string()),
         audit_events_table: env::var("AUDIT_EVENTS_TABLE_NAME")

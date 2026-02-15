@@ -14,6 +14,7 @@ use sha2::{digest::Update, Digest, Sha256};
 
 use crate::{
     audit::{append_event, token_error_code, AuditEventInput, ERROR_CODE_KEY},
+    client_credentials,
     db::refresh_token::RefreshTokenTable,
     jwt::{AccessTokenClaims, IdTokenClaims},
     refresh_token::generate_refresh_token,
@@ -29,6 +30,7 @@ pub struct TokenRequest {
     grant_type: String,
     refresh_token: Option<String>,
     client_id: Option<String>,
+    client_secret: Option<String>,
     scope: Option<String>,
     code: Option<String>,
     redirect_uri: Option<String>,
@@ -36,7 +38,7 @@ pub struct TokenRequest {
 }
 
 /// RFC 6749 Section 5.2 error response.
-fn token_error(error: &str, description: &str) -> (StatusCode, Json<serde_json::Value>) {
+fn token_error(error: &str, description: &str) -> Response {
     (
         StatusCode::BAD_REQUEST,
         Json(json!({
@@ -44,6 +46,27 @@ fn token_error(error: &str, description: &str) -> (StatusCode, Json<serde_json::
             "error_description": description,
         })),
     )
+        .into_response()
+}
+
+fn invalid_client_error(description: &str) -> Response {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "WWW-Authenticate",
+        HeaderValue::from_static(
+            "Basic realm=\"token\", error=\"invalid_client\", error_description=\"client authentication failed\"",
+        ),
+    );
+
+    (
+        StatusCode::UNAUTHORIZED,
+        headers,
+        Json(json!({
+            "error": "invalid_client",
+            "error_description": description,
+        })),
+    )
+        .into_response()
 }
 
 fn cache_control_headers() -> HeaderMap {
@@ -56,7 +79,7 @@ fn cache_control_headers() -> HeaderMap {
 pub async fn handler(
     State(state): State<AppState>,
     Form(body): Form<TokenRequest>,
-) -> Result<Response, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<Response, Response> {
     let grant_type = body.grant_type.clone();
     let client_id = body.client_id.clone();
     let client_ip = None;
@@ -68,6 +91,9 @@ pub async fn handler(
             .await
             .map(|r| r.into_response()),
         "authorization_code" => handle_authorization_code(state, body)
+            .await
+            .map(|r| r.into_response()),
+        "client_credentials" => handle_client_credentials(state, body)
             .await
             .map(|r| r.into_response()),
         _ => Err(token_error(
@@ -86,7 +112,7 @@ pub async fn handler(
 }
 
 fn build_token_audit_event(
-    response: &Result<Response, (StatusCode, Json<serde_json::Value>)>,
+    response: &Result<Response, Response>,
     grant_type: String,
     client_id: Option<String>,
     client_ip: Option<String>,
@@ -96,27 +122,20 @@ fn build_token_audit_event(
     metadata.insert("route".to_string(), "/token".to_string());
     metadata.insert("grant_type".to_string(), grant_type);
 
-    let outcome = match response {
-        Ok(_) => "success".to_string(),
-        Err((_, error_json)) => {
-            let error_code = token_error_code(
-                error_json
-                    .0
-                    .get("error")
-                    .and_then(serde_json::Value::as_str),
-            );
-            metadata.insert(ERROR_CODE_KEY.to_string(), error_code.to_string());
-
-            if let Some(original_error) = error_json
-                .0
-                .get("error")
-                .and_then(serde_json::Value::as_str)
-            {
-                metadata.insert("oauth_error".to_string(), original_error.to_string());
-            }
-            "failure".to_string()
-        }
+    let (outcome, status_code) = match response {
+        Ok(success) => ("success".to_string(), success.status()),
+        Err(failure) => ("failure".to_string(), failure.status()),
     };
+
+    if outcome == "failure" {
+        let mapped_code = if status_code == StatusCode::UNAUTHORIZED {
+            token_error_code(Some("invalid_client"))
+        } else {
+            token_error_code(None)
+        };
+        metadata.insert(ERROR_CODE_KEY.to_string(), mapped_code.to_string());
+        metadata.insert("http_status".to_string(), status_code.as_u16().to_string());
+    }
 
     AuditEventInput {
         event_type: "oauth.token".to_string(),
@@ -128,10 +147,65 @@ fn build_token_audit_event(
     }
 }
 
+async fn handle_client_credentials(
+    state: AppState,
+    body: TokenRequest,
+) -> Result<impl IntoResponse, Response> {
+    let client_id = body
+        .client_id
+        .ok_or_else(|| token_error("invalid_request", "client_id parameter is required"))?;
+
+    let client = state
+        .db
+        .get_client(&client_id)
+        .await
+        .map_err(|e| token_error("server_error", &format!("failed to look up client: {e}")))?
+        .ok_or_else(|| invalid_client_error("client authentication failed"))?;
+
+    let is_authenticated =
+        client_credentials::authenticate_client_secret_post(&client, body.client_secret.as_deref())
+            .map_err(|_| token_error("server_error", "failed to verify client secret"))?;
+    if !is_authenticated {
+        return Err(invalid_client_error("client authentication failed"));
+    }
+
+    let scope = client_credentials::resolve_scope(&client, body.scope.as_deref())
+        .map_err(|e| token_error("invalid_scope", e))?;
+
+    let jwt_keys = state
+        .jwt_keys
+        .as_ref()
+        .ok_or_else(|| token_error("server_error", "JWT signing is not configured"))?;
+
+    let now = chrono::Utc::now().timestamp() as usize;
+    let access_claims = AccessTokenClaims {
+        iss: state.issuer_url,
+        sub: client_id.clone(),
+        aud: client_id,
+        exp: now + ACCESS_TOKEN_EXPIRY_SECS as usize,
+        iat: now,
+        scope: scope.clone(),
+        email: String::new(),
+    };
+
+    let access_token = jwt_keys
+        .sign_access_token(&access_claims)
+        .map_err(|e| token_error("server_error", &format!("failed to sign access token: {e}")))?;
+
+    let response_body = json!({
+        "access_token": access_token,
+        "token_type": "Bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRY_SECS,
+        "scope": scope,
+    });
+
+    Ok((StatusCode::OK, cache_control_headers(), Json(response_body)))
+}
+
 async fn handle_authorization_code(
     state: AppState,
     body: TokenRequest,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<impl IntoResponse, Response> {
     // Validate required fields
     let raw_code = body
         .code
@@ -274,7 +348,7 @@ async fn handle_authorization_code(
 async fn handle_refresh_token(
     state: AppState,
     body: TokenRequest,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<impl IntoResponse, Response> {
     let raw_token = body
         .refresh_token
         .ok_or_else(|| token_error("invalid_request", "refresh_token parameter is required"))?;
@@ -406,6 +480,7 @@ mod tests {
     use crate::{
         db::{auth_code::AuthCodeTable, client::ClientTable, refresh_token::RefreshTokenTable},
         jwt::{generate_es256_keypair, JwtKeys},
+        password::hash_password,
         state::AppState,
     };
 
@@ -473,9 +548,35 @@ mod tests {
                     "profile".to_string(),
                 ],
                 client_name: "Test App".to_string(),
+                client_secret_hash: None,
+                token_endpoint_auth_method: "none".to_string(),
             })
             .await
             .unwrap();
+    }
+
+    async fn setup_machine_client_with_secret(
+        state: &AppState,
+        auth_method: &str,
+        allowed_scopes: Vec<&str>,
+    ) -> String {
+        let client_secret = "machine-secret".to_string();
+        let secret_hash = hash_password(&client_secret).unwrap();
+
+        state
+            .db
+            .insert_client(ClientTable {
+                client_id: "machine-client".to_string(),
+                redirect_uris: vec![],
+                allowed_scopes: allowed_scopes.iter().map(|s| s.to_string()).collect(),
+                client_name: "Machine Client".to_string(),
+                client_secret_hash: Some(secret_hash),
+                token_endpoint_auth_method: auth_method.to_string(),
+            })
+            .await
+            .unwrap();
+
+        client_secret
     }
 
     /// Create an auth code with PKCE. Returns (raw_code, code_verifier).
@@ -636,7 +737,7 @@ mod tests {
         let state = test_state();
         let app = test_router(state);
 
-        let body = "grant_type=client_credentials";
+        let body = "grant_type=password";
         let request = Request::builder()
             .method("POST")
             .uri("/token")
@@ -652,6 +753,204 @@ mod tests {
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error"], "unsupported_grant_type");
+    }
+
+    #[tokio::test]
+    async fn test_client_credentials_grant_success() {
+        let state = test_state();
+        let client_secret =
+            setup_machine_client_with_secret(&state, "client_secret_post", vec!["api:read"]).await;
+        let app = test_router(state);
+
+        let body = format!(
+            "grant_type=client_credentials&client_id=machine-client&client_secret={}&scope=api%3Aread",
+            urlencoding::encode(&client_secret)
+        );
+        let request = Request::builder()
+            .method("POST")
+            .uri("/token")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        assert_eq!(response.headers().get("Cache-Control").unwrap(), "no-store");
+        assert_eq!(response.headers().get("Pragma").unwrap(), "no-cache");
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["token_type"], "Bearer");
+        assert_eq!(json["expires_in"], 900);
+        assert_eq!(json["scope"], "api:read");
+        assert!(json["access_token"].is_string());
+        assert!(json.get("refresh_token").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_client_credentials_missing_client_id() {
+        let state = test_state();
+        let app = test_router(state);
+
+        let body = "grant_type=client_credentials&scope=email";
+        let request = Request::builder()
+            .method("POST")
+            .uri("/token")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["error"], "invalid_request");
+    }
+
+    #[tokio::test]
+    async fn test_client_credentials_invalid_secret_returns_401() {
+        let state = test_state();
+        setup_machine_client_with_secret(&state, "client_secret_post", vec!["api:read"]).await;
+        let app = test_router(state);
+
+        let body =
+            "grant_type=client_credentials&client_id=machine-client&client_secret=wrong&scope=api%3Aread";
+        let request = Request::builder()
+            .method("POST")
+            .uri("/token")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert!(response.headers().contains_key("WWW-Authenticate"));
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["error"], "invalid_client");
+    }
+
+    #[tokio::test]
+    async fn test_client_credentials_missing_secret_returns_401() {
+        let state = test_state();
+        setup_machine_client_with_secret(&state, "client_secret_post", vec!["api:read"]).await;
+        let app = test_router(state);
+
+        let body = "grant_type=client_credentials&client_id=machine-client&scope=api%3Aread";
+        let request = Request::builder()
+            .method("POST")
+            .uri("/token")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert!(response.headers().contains_key("WWW-Authenticate"));
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["error"], "invalid_client");
+    }
+
+    #[tokio::test]
+    async fn test_client_credentials_unsupported_auth_method_returns_401() {
+        let state = test_state();
+        let client_secret =
+            setup_machine_client_with_secret(&state, "none", vec!["api:read"]).await;
+        let app = test_router(state);
+
+        let body = format!(
+            "grant_type=client_credentials&client_id=machine-client&client_secret={}&scope=api%3Aread",
+            urlencoding::encode(&client_secret)
+        );
+        let request = Request::builder()
+            .method("POST")
+            .uri("/token")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["error"], "invalid_client");
+    }
+
+    #[tokio::test]
+    async fn test_client_credentials_invalid_scope() {
+        let state = test_state();
+        let client_secret =
+            setup_machine_client_with_secret(&state, "client_secret_post", vec!["api:read"]).await;
+        let app = test_router(state);
+
+        let body = format!(
+            "grant_type=client_credentials&client_id=machine-client&client_secret={}&scope=admin",
+            urlencoding::encode(&client_secret)
+        );
+        let request = Request::builder()
+            .method("POST")
+            .uri("/token")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["error"], "invalid_scope");
+    }
+
+    #[tokio::test]
+    async fn test_client_credentials_rejects_openid_scope() {
+        let state = test_state();
+        let client_secret = setup_machine_client_with_secret(
+            &state,
+            "client_secret_post",
+            vec!["api:read", "openid"],
+        )
+        .await;
+        let app = test_router(state);
+
+        let body = format!(
+            "grant_type=client_credentials&client_id=machine-client&client_secret={}&scope=openid",
+            urlencoding::encode(&client_secret)
+        );
+        let request = Request::builder()
+            .method("POST")
+            .uri("/token")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["error"], "invalid_scope");
     }
 
     #[tokio::test]

@@ -47,6 +47,7 @@ export class EricAuthStack extends Stack {
       credentialsTable: database.credentialsTable,
       challengesTable: database.challengesTable,
       clientsTable: database.clientsTable,
+      tenantsTable: database.tenantsTable,
       authCodesTable: database.authCodesTable,
       rateLimitsTable: database.rateLimitsTable,
       jwtSecret,

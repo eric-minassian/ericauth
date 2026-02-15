@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use axum::{
     extract::State,
     http::HeaderMap,
@@ -7,6 +9,8 @@ use axum::{
 use serde::Deserialize;
 
 use crate::{
+    audit::{append_event, auth_error_code, AuditEventInput, ERROR_CODE_KEY},
+    db::Database,
     error::AuthError,
     oauth::build_oauth_qs,
     password::verify_password_hash,
@@ -54,13 +58,44 @@ pub async fn handler(
         ("nonce", &body.nonce),
     ]);
 
+    let client_ip = headers
+        .get("X-Forwarded-For")
+        .and_then(|v| v.to_str().ok())
+        .map(ToString::to_string);
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(ToString::to_string);
+    let audit_db = state.db.clone();
+
     match try_login(state, headers, body).await {
-        Ok(resp) => resp,
+        Ok(resp) => {
+            emit_login_audit_event(
+                audit_db.as_ref(),
+                "success",
+                submitted_email.clone(),
+                client_ip.clone(),
+                user_agent.clone(),
+                None,
+            )
+            .await;
+            resp
+        }
         Err(err) => {
+            emit_login_audit_event(
+                audit_db.as_ref(),
+                "failure",
+                submitted_email.clone(),
+                client_ip.clone(),
+                user_agent.clone(),
+                Some(auth_error_code(&err).to_string()),
+            )
+            .await;
             let msg = match &err {
                 AuthError::Internal(_) => "An unexpected error occurred",
                 AuthError::BadRequest(m)
                 | AuthError::Unauthorized(m)
+                | AuthError::Forbidden(m)
                 | AuthError::Conflict(m)
                 | AuthError::NotFound(m)
                 | AuthError::TooManyRequests(m) => m,
@@ -72,6 +107,37 @@ pub async fn handler(
             };
             Redirect::to(&redirect_url).into_response()
         }
+    }
+}
+
+async fn emit_login_audit_event(
+    db: &dyn Database,
+    outcome: &str,
+    actor: Option<String>,
+    client_ip: Option<String>,
+    user_agent: Option<String>,
+    error_code: Option<String>,
+) {
+    let mut metadata = BTreeMap::new();
+    metadata.insert("route".to_string(), "/login".to_string());
+    if let Some(code) = error_code {
+        metadata.insert(ERROR_CODE_KEY.to_string(), code);
+    }
+
+    if let Err(error) = append_event(
+        db,
+        AuditEventInput {
+            event_type: "auth.login".to_string(),
+            outcome: outcome.to_string(),
+            actor,
+            client_ip,
+            user_agent,
+            metadata,
+        },
+    )
+    .await
+    {
+        tracing::warn!(error = %error, "Failed to append login audit event");
     }
 }
 

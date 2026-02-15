@@ -1,6 +1,9 @@
 mod account;
+mod audit_events;
 pub(crate) mod authorize;
+mod compliance;
 mod consent;
+pub(crate) mod events_webhook;
 mod favicon;
 mod health;
 mod jwks;
@@ -30,8 +33,8 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::{
     middleware::{
-        csrf::csrf_middleware, rate_limit::rate_limit_middleware,
-        security_headers::security_headers_middleware,
+        admin_auth::admin_auth_middleware, csrf::csrf_middleware,
+        rate_limit::rate_limit_middleware, security_headers::security_headers_middleware,
     },
     state::AppState,
 };
@@ -97,11 +100,33 @@ pub fn router(state: AppState) -> Router {
             rate_limit_middleware,
         ));
 
+    let admin_routes = Router::new()
+        .route(
+            "/audit/events",
+            get(audit_events::get_handler).post(audit_events::post_handler),
+        )
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            admin_auth_middleware,
+        ));
+
     // All other routes (no rate limit, no CORS)
     let other_routes = Router::new()
         .route("/favicon.ico", get(favicon::handler))
         .route("/health", get(health::handler))
         .route("/logout", post(logout::handler))
+        .route(
+            "/compliance/account/export",
+            get(compliance::account_export_handler),
+        )
+        .route(
+            "/compliance/account/delete",
+            post(compliance::account_delete_handler),
+        )
+        .route(
+            "/compliance/audit/evidence",
+            get(compliance::audit_evidence_handler),
+        )
         .route(
             "/consent",
             get(consent::get_handler).post(consent::post_handler),
@@ -137,6 +162,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .merge(cors_routes)
         .merge(rate_limited_routes)
+        .merge(admin_routes)
         .merge(other_routes)
         .layer(middleware::from_fn(csrf_middleware))
         .layer(middleware::from_fn(security_headers_middleware))

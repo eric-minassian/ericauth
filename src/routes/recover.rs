@@ -40,6 +40,7 @@ pub async fn handler(
                 AuthError::Internal(_) => "An unexpected error occurred",
                 AuthError::BadRequest(m)
                 | AuthError::Unauthorized(m)
+                | AuthError::Forbidden(m)
                 | AuthError::Conflict(m)
                 | AuthError::NotFound(m)
                 | AuthError::TooManyRequests(m) => m,

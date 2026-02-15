@@ -8,6 +8,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::audit::AuditEventRecord;
 use crate::error::AuthError;
 
 use super::auth_code::AuthCodeTable;
@@ -37,6 +38,7 @@ struct MemoryDbSnapshot {
     users: HashMap<Uuid, UserTable>,
     sessions: HashMap<String, SessionTable>,
     refresh_tokens: HashMap<String, RefreshTokenTable>,
+    audit_events: Vec<AuditEventRecord>,
     credentials: HashMap<String, CredentialTable>,
     challenges: HashMap<String, ChallengeRecord>,
     clients: HashMap<String, ClientTable>,
@@ -51,6 +53,7 @@ pub struct MemoryDb {
     users: Arc<RwLock<HashMap<Uuid, UserTable>>>,
     sessions: Arc<RwLock<HashMap<String, SessionTable>>>,
     refresh_tokens: Arc<RwLock<HashMap<String, RefreshTokenTable>>>,
+    audit_events: Arc<RwLock<Vec<AuditEventRecord>>>,
     credentials: Arc<RwLock<HashMap<String, CredentialTable>>>,
     challenges: Arc<RwLock<HashMap<String, ChallengeRecord>>>,
     clients: Arc<RwLock<HashMap<String, ClientTable>>>,
@@ -77,6 +80,7 @@ impl MemoryDb {
             users: Arc::new(RwLock::new(snapshot.users)),
             sessions: Arc::new(RwLock::new(snapshot.sessions)),
             refresh_tokens: Arc::new(RwLock::new(snapshot.refresh_tokens)),
+            audit_events: Arc::new(RwLock::new(snapshot.audit_events)),
             credentials: Arc::new(RwLock::new(snapshot.credentials)),
             challenges: Arc::new(RwLock::new(snapshot.challenges)),
             clients: Arc::new(RwLock::new(snapshot.clients)),
@@ -120,6 +124,11 @@ impl MemoryDb {
                 .clone(),
             refresh_tokens: self
                 .refresh_tokens
+                .read()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
+                .clone(),
+            audit_events: self
+                .audit_events
                 .read()
                 .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
                 .clone(),
@@ -225,6 +234,25 @@ impl MemoryDb {
             .read()
             .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
         Ok(users.get(&user_uuid).cloned())
+    }
+
+    pub async fn delete_user_by_id(&self, user_id: &str) -> Result<bool, AuthError> {
+        let user_uuid = Uuid::parse_str(user_id)
+            .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
+
+        let deleted = {
+            let mut users = self
+                .users
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+            users.remove(&user_uuid).is_some()
+        };
+
+        if deleted {
+            self.persist_if_configured()?;
+        }
+
+        Ok(deleted)
     }
 
     pub async fn update_user_scopes(
@@ -476,6 +504,50 @@ impl MemoryDb {
         }
 
         Ok(())
+    }
+
+    pub async fn delete_refresh_tokens_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> Result<usize, AuthError> {
+        let removed = {
+            let mut tokens = self
+                .refresh_tokens
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+            let before = tokens.len();
+            tokens.retain(|_, token| token.user_id != user_id);
+            before - tokens.len()
+        };
+
+        if removed > 0 {
+            self.persist_if_configured()?;
+        }
+
+        Ok(removed)
+    }
+
+    pub async fn insert_audit_event(&self, event: AuditEventRecord) -> Result<(), AuthError> {
+        {
+            let mut audit_events = self
+                .audit_events
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+            audit_events.push(event);
+        }
+
+        self.persist_if_configured()?;
+        Ok(())
+    }
+
+    pub async fn list_audit_events(&self) -> Result<Vec<AuditEventRecord>, AuthError> {
+        let audit_events = self
+            .audit_events
+            .read()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        Ok(audit_events.clone())
     }
 
     // --- Credential operations ---

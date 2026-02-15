@@ -15,6 +15,7 @@ use serde_json::json;
 pub enum AuthError {
     BadRequest(String),
     Unauthorized(String),
+    Forbidden(String),
     NotFound(String),
     Conflict(String),
     Internal(String),
@@ -26,6 +27,7 @@ impl fmt::Display for AuthError {
         match self {
             AuthError::BadRequest(msg) => write!(f, "Bad Request: {msg}"),
             AuthError::Unauthorized(msg) => write!(f, "Unauthorized: {msg}"),
+            AuthError::Forbidden(msg) => write!(f, "Forbidden: {msg}"),
             AuthError::NotFound(msg) => write!(f, "Not Found: {msg}"),
             AuthError::Conflict(msg) => write!(f, "Conflict: {msg}"),
             AuthError::Internal(msg) => write!(f, "Internal Server Error: {msg}"),
@@ -41,6 +43,7 @@ impl IntoResponse for AuthError {
         let (status, error_kind) = match &self {
             AuthError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             AuthError::Unauthorized(_) => (StatusCode::UNAUTHORIZED, "unauthorized"),
+            AuthError::Forbidden(_) => (StatusCode::FORBIDDEN, "forbidden"),
             AuthError::NotFound(_) => (StatusCode::NOT_FOUND, "not_found"),
             AuthError::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
             AuthError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
@@ -50,6 +53,7 @@ impl IntoResponse for AuthError {
         let message = match &self {
             AuthError::BadRequest(msg)
             | AuthError::Unauthorized(msg)
+            | AuthError::Forbidden(msg)
             | AuthError::NotFound(msg)
             | AuthError::Conflict(msg)
             | AuthError::Internal(msg)

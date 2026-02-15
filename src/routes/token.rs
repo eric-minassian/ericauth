@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use axum::{
     extract::State,
     http::{HeaderMap, HeaderValue, StatusCode},
@@ -11,6 +13,7 @@ use serde_json::json;
 use sha2::{digest::Update, Digest, Sha256};
 
 use crate::{
+    audit::{append_event, token_error_code, AuditEventInput, ERROR_CODE_KEY},
     db::refresh_token::RefreshTokenTable,
     jwt::{AccessTokenClaims, IdTokenClaims},
     refresh_token::generate_refresh_token,
@@ -54,7 +57,13 @@ pub async fn handler(
     State(state): State<AppState>,
     Form(body): Form<TokenRequest>,
 ) -> Result<Response, (StatusCode, Json<serde_json::Value>)> {
-    match body.grant_type.as_str() {
+    let grant_type = body.grant_type.clone();
+    let client_id = body.client_id.clone();
+    let client_ip = None;
+    let user_agent = None;
+    let audit_db = state.db.clone();
+
+    let response = match body.grant_type.as_str() {
         "refresh_token" => handle_refresh_token(state, body)
             .await
             .map(|r| r.into_response()),
@@ -65,6 +74,57 @@ pub async fn handler(
             "unsupported_grant_type",
             &format!("grant_type '{}' is not supported", body.grant_type),
         )),
+    };
+
+    let audit_event =
+        build_token_audit_event(&response, grant_type, client_id, client_ip, user_agent);
+    if let Err(error) = append_event(audit_db.as_ref(), audit_event).await {
+        tracing::warn!(error = %error, "Failed to append token audit event");
+    }
+
+    response
+}
+
+fn build_token_audit_event(
+    response: &Result<Response, (StatusCode, Json<serde_json::Value>)>,
+    grant_type: String,
+    client_id: Option<String>,
+    client_ip: Option<String>,
+    user_agent: Option<String>,
+) -> AuditEventInput {
+    let mut metadata = BTreeMap::new();
+    metadata.insert("route".to_string(), "/token".to_string());
+    metadata.insert("grant_type".to_string(), grant_type);
+
+    let outcome = match response {
+        Ok(_) => "success".to_string(),
+        Err((_, error_json)) => {
+            let error_code = token_error_code(
+                error_json
+                    .0
+                    .get("error")
+                    .and_then(serde_json::Value::as_str),
+            );
+            metadata.insert(ERROR_CODE_KEY.to_string(), error_code.to_string());
+
+            if let Some(original_error) = error_json
+                .0
+                .get("error")
+                .and_then(serde_json::Value::as_str)
+            {
+                metadata.insert("oauth_error".to_string(), original_error.to_string());
+            }
+            "failure".to_string()
+        }
+    };
+
+    AuditEventInput {
+        event_type: "oauth.token".to_string(),
+        outcome,
+        actor: client_id,
+        client_ip,
+        user_agent,
+        metadata,
     }
 }
 

@@ -104,6 +104,20 @@ impl DynamoDb {
         }
     }
 
+    pub async fn delete_user_by_id(&self, user_id: &str) -> Result<bool, AuthError> {
+        let response = self
+            .client
+            .delete_item()
+            .table_name(&self.users_table)
+            .key("id", AttributeValue::S(user_id.to_string()))
+            .return_values(aws_sdk_dynamodb::types::ReturnValue::AllOld)
+            .send()
+            .await
+            .map_err(|e| AuthError::Internal(format!("Failed to delete user: {e}")))?;
+
+        Ok(response.attributes.is_some())
+    }
+
     pub async fn update_user_scopes(
         &self,
         user_id: &str,

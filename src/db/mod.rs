@@ -16,10 +16,10 @@ use std::env;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use chrono::Utc;
 use uuid::Uuid;
 
-use crate::audit::AuditEventRecord;
-use crate::error::AuthError;
+use crate::{audit::AuditEventRecord, error::AuthError, saml::SamlConfig};
 
 use self::auth_code::AuthCodeTable;
 use self::client::ClientTable;
@@ -91,6 +91,18 @@ pub trait Database: Send + Sync {
         &self,
         token: &str,
     ) -> Result<Option<PasswordResetTable>, AuthError>;
+    async fn scim_create_user(&self, email: String, active: bool) -> Result<UserTable, AuthError>;
+    async fn scim_update_user(
+        &self,
+        user_id: &str,
+        email: String,
+        active: bool,
+    ) -> Result<UserTable, AuthError>;
+    async fn scim_set_user_active(
+        &self,
+        user_id: &str,
+        active: bool,
+    ) -> Result<UserTable, AuthError>;
     async fn delete_user_by_id(&self, user_id: &str) -> Result<bool, AuthError>;
 
     // Session operations
@@ -305,6 +317,63 @@ impl Database for DynamoDb {
         token: &str,
     ) -> Result<Option<PasswordResetTable>, AuthError> {
         DynamoDb::redeem_password_reset_token(self, token).await
+    }
+
+    async fn scim_create_user(&self, email: String, active: bool) -> Result<UserTable, AuthError> {
+        let now = Utc::now().to_rfc3339();
+        let user_id = DynamoDb::insert_user(
+            self,
+            email,
+            None,
+            now.clone(),
+            now,
+            scim_active_scopes(active),
+            vec![],
+        )
+        .await?;
+
+        DynamoDb::get_user_by_id(self, &user_id.to_string())
+            .await?
+            .ok_or_else(|| AuthError::Internal("SCIM-created user missing after insert".into()))
+    }
+
+    async fn scim_update_user(
+        &self,
+        user_id: &str,
+        email: String,
+        active: bool,
+    ) -> Result<UserTable, AuthError> {
+        let user = DynamoDb::get_user_by_id(self, user_id)
+            .await?
+            .ok_or_else(|| AuthError::NotFound("user not found".into()))?;
+
+        if user.email != email {
+            return Err(AuthError::BadRequest(
+                "SCIM userName updates are not supported".into(),
+            ));
+        }
+
+        DynamoDb::update_user_scopes(self, user_id, scim_active_scopes(active)).await?;
+
+        DynamoDb::get_user_by_id(self, user_id)
+            .await?
+            .ok_or_else(|| AuthError::Internal("SCIM-updated user missing after update".into()))
+    }
+
+    async fn scim_set_user_active(
+        &self,
+        user_id: &str,
+        active: bool,
+    ) -> Result<UserTable, AuthError> {
+        let _user = DynamoDb::get_user_by_id(self, user_id)
+            .await?
+            .ok_or_else(|| AuthError::NotFound("user not found".into()))?;
+
+        DynamoDb::update_user_scopes(self, user_id, scim_active_scopes(active)).await?;
+
+        DynamoDb::get_user_by_id(self, user_id)
+            .await?
+            .ok_or_else(|| AuthError::Internal("SCIM-updated user missing after update".into()))
     }
 
     async fn delete_user_by_id(&self, user_id: &str) -> Result<bool, AuthError> {
@@ -575,6 +644,63 @@ impl Database for memory::MemoryDb {
         memory::MemoryDb::redeem_password_reset_token(self, token).await
     }
 
+    async fn scim_create_user(&self, email: String, active: bool) -> Result<UserTable, AuthError> {
+        let now = Utc::now().to_rfc3339();
+        let user_id = memory::MemoryDb::insert_user(
+            self,
+            email,
+            None,
+            now.clone(),
+            now,
+            scim_active_scopes(active),
+            vec![],
+        )
+        .await?;
+
+        memory::MemoryDb::get_user_by_id(self, &user_id.to_string())
+            .await?
+            .ok_or_else(|| AuthError::Internal("SCIM-created user missing after insert".into()))
+    }
+
+    async fn scim_update_user(
+        &self,
+        user_id: &str,
+        email: String,
+        active: bool,
+    ) -> Result<UserTable, AuthError> {
+        let user = memory::MemoryDb::get_user_by_id(self, user_id)
+            .await?
+            .ok_or_else(|| AuthError::NotFound("user not found".into()))?;
+
+        if user.email != email {
+            return Err(AuthError::BadRequest(
+                "SCIM userName updates are not supported".into(),
+            ));
+        }
+
+        memory::MemoryDb::update_user_scopes(self, user_id, scim_active_scopes(active)).await?;
+
+        memory::MemoryDb::get_user_by_id(self, user_id)
+            .await?
+            .ok_or_else(|| AuthError::Internal("SCIM-updated user missing after update".into()))
+    }
+
+    async fn scim_set_user_active(
+        &self,
+        user_id: &str,
+        active: bool,
+    ) -> Result<UserTable, AuthError> {
+        let _user = memory::MemoryDb::get_user_by_id(self, user_id)
+            .await?
+            .ok_or_else(|| AuthError::NotFound("user not found".into()))?;
+
+        memory::MemoryDb::update_user_scopes(self, user_id, scim_active_scopes(active)).await?;
+
+        memory::MemoryDb::get_user_by_id(self, user_id)
+            .await?
+            .ok_or_else(|| AuthError::Internal("SCIM-updated user missing after update".into()))
+    }
+
     async fn delete_user_by_id(&self, user_id: &str) -> Result<bool, AuthError> {
         memory::MemoryDb::delete_user_by_id(self, user_id).await
     }
@@ -837,6 +963,25 @@ pub async fn delete_account_data(
 
 pub async fn load_audit_evidence(db: &dyn Database) -> Result<Vec<AuditEventRecord>, AuthError> {
     db.list_audit_events().await
+}
+
+pub fn get_saml_config(_db: &dyn Database, issuer_url: &str) -> Result<SamlConfig, AuthError> {
+    let config = SamlConfig::from_env(issuer_url);
+    config
+        .validate()
+        .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+    Ok(config)
+}
+
+const SCIM_ACTIVE_SCOPE: &str = "scim:active";
+
+fn scim_active_scopes(active: bool) -> Vec<String> {
+    if active {
+        vec![SCIM_ACTIVE_SCOPE.to_string()]
+    } else {
+        vec![]
+    }
 }
 
 /// Look up a session by raw token, verifying it hasn't expired.

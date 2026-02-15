@@ -476,3 +476,21 @@ All tables use DynamoDB with on-demand (PAY_PER_REQUEST) billing.
 2. **Consent persistence:** Should we remember user consent per client (skip consent screen on subsequent logins)?
 3. **Account linking:** If a user signs up with password and later adds a passkey, should they be able to remove their password entirely?
 4. **Session limits:** Max number of concurrent sessions per user?
+
+## 13. Roadmap Track Implementation Status (Pre-Merge)
+
+As of 2026-02-14, maximal roadmap work is being developed in parallel track worktrees and has not yet been merged into `main`.
+
+| Track | Worktree | Current status | Latest verification |
+|-------|----------|----------------|---------------------|
+| Track A - Identity lifecycle + MFA | `.worktrees/track-a-identity-lifecycle` | Implemented in feature branch | `make lint` + `make test` passed (94 tests) |
+| Track B - Federation | `.worktrees/track-b-federation` | Implemented in feature branch | `make lint` + `make test` passed (85 tests); `make e2e` passed; `make synth` passed |
+| Track C - Security/compliance | `.worktrees/track-c-security-compliance` | Implemented in feature branch | `make lint` + `make test` passed (87 tests) |
+| Track D - Admin/dev experience | `.worktrees/track-d-admin-dx` | Implemented in feature branch | `make lint` + `make test` passed (77 tests) |
+| Track E - Machine authz | `.worktrees/track-e-machine-authz` | Implemented in feature branch | `make lint` + `make test` passed (90 tests) |
+
+Integration notes:
+
+- Verification above is branch-local readiness evidence, not merged-release proof.
+- Integration should proceed track-by-track onto a convergence branch with full suite reruns.
+- Final release readiness requires fresh post-convergence verification and PR validation.

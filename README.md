@@ -75,6 +75,24 @@ make deploy-prod     # Deploy prod
 
 CI runs on PRs (Rust lint + unit tests). Pushes to `main` rerun tests, run local Playwright E2E, deploy to beta, run Playwright E2E against beta, deploy to prod, then run prod smoke tests.
 
+## Parallel Roadmap Worktree Status (2026-02-14)
+
+Roadmap implementation is currently in parallel feature worktrees and is not merged into `main` yet.
+
+| Track | Worktree | Current readiness run |
+|---|---|---|
+| A - Identity lifecycle + MFA | `.worktrees/track-a-identity-lifecycle` | `make lint` + `make test` passed (94 tests) |
+| B - Federation (SAML/SCIM) | `.worktrees/track-b-federation` | `make lint` + `make test` passed (85 tests); `make e2e` passed (6 tests); `make synth` passed |
+| C - Security/compliance | `.worktrees/track-c-security-compliance` | `make lint` + `make test` passed (87 tests) |
+| D - Admin/developer experience | `.worktrees/track-d-admin-dx` | `make lint` + `make test` passed (77 tests) |
+| E - Machine authz | `.worktrees/track-e-machine-authz` | `make lint` + `make test` passed (90 tests) |
+
+Verification strategy for integration:
+
+- Keep per-track verification in each isolated worktree before merge preparation.
+- Re-run `make lint`, `make test`, and track-specific checks (`make e2e`, `make synth`) on the integration branch before PR.
+- Treat worktree results as pre-merge evidence only; final release readiness is validated after branch convergence.
+
 ### AWS OIDC Setup (once per account)
 
 The deploy pipeline authenticates via GitHub OIDC. Run this once in each AWS account (beta and prod) to create the OIDC provider and deploy role:

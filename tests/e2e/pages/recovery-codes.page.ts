@@ -7,7 +7,7 @@ export class RecoveryCodesPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.heading = page.getByRole('heading', { name: 'Recovery Codes' });
+    this.heading = page.getByRole('heading', { name: /Recovery codes/i });
     this.continueLink = page.getByRole('link', { name: 'Continue' });
   }
 

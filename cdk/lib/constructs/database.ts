@@ -11,6 +11,7 @@ export class Database extends Construct {
   public readonly usersTable: TableV2;
   public readonly sessionsTable: TableV2;
   public readonly refreshTokensTable: TableV2;
+  public readonly auditEventsTable: TableV2;
   public readonly credentialsTable: TableV2;
   public readonly challengesTable: TableV2;
   public readonly clientsTable: TableV2;
@@ -55,6 +56,12 @@ export class Database extends Construct {
       tableName: `${prefix}-refresh-tokens`,
       partitionKey: { name: "token_hash", type: AttributeType.STRING },
       timeToLiveAttribute: "expires_at",
+      removalPolicy,
+    });
+
+    this.auditEventsTable = new TableV2(this, "AuditEventsTable", {
+      tableName: `${prefix}-audit-events`,
+      partitionKey: { name: "id", type: AttributeType.STRING },
       removalPolicy,
     });
 

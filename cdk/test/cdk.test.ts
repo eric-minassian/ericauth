@@ -54,10 +54,10 @@ test("creates refresh tokens table with TTL", () => {
   });
 });
 
-test("creates exactly 8 DynamoDB tables", () => {
+test("creates exactly 9 DynamoDB tables", () => {
   const template = createTestStack();
   const tables = template.findResources("AWS::DynamoDB::GlobalTable");
-  expect(Object.keys(tables).length).toBe(8);
+  expect(Object.keys(tables).length).toBe(9);
 });
 
 // --- Lambda ---
@@ -71,6 +71,7 @@ test("creates Lambda function with table name env vars", () => {
         USERS_TABLE_NAME: Match.anyValue(),
         SESSIONS_TABLE_NAME: Match.anyValue(),
         REFRESH_TOKENS_TABLE_NAME: Match.anyValue(),
+        AUDIT_EVENTS_TABLE_NAME: Match.anyValue(),
       }),
     },
   });

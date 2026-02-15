@@ -10,6 +10,7 @@ use ericauth::{
     jwt::{generate_es256_keypair, JwtKeys},
     refresh_token::generate_refresh_token,
     routes,
+    session::{create_session, generate_session_token},
     state::AppState,
 };
 
@@ -55,6 +56,35 @@ fn session_id_from_cookie(session_cookie: &str) -> String {
         .strip_prefix("session=")
         .expect("session cookie should start with session=");
     hex::encode(Sha256::new().chain(token.as_bytes()).finalize())
+}
+
+async fn create_admin_session_cookie(state: &AppState) -> String {
+    let now = chrono::Utc::now().to_rfc3339();
+    let user_id = state
+        .db
+        .insert_user(
+            "audit-admin@example.com".to_string(),
+            Some("hashed_pw".to_string()),
+            now.clone(),
+            now,
+            vec!["admin".to_string()],
+            vec![],
+        )
+        .await
+        .unwrap();
+
+    let token = generate_session_token().unwrap();
+    create_session(
+        state.db.as_ref(),
+        token.clone(),
+        user_id,
+        "127.0.0.1".to_string(),
+        Some("integration-test".to_string()),
+    )
+    .await
+    .unwrap();
+
+    format!("session={token}")
 }
 
 // --- Health endpoint ---
@@ -399,6 +429,93 @@ async fn test_no_session_returns_unauthorized() {
 
     let response = app.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_audit_events_rejects_anonymous_read_and_write() {
+    let state = test_state();
+
+    let app = test_router(state.clone());
+    let read_request = Request::builder()
+        .method("GET")
+        .uri("/audit/events")
+        .body(Body::empty())
+        .unwrap();
+    let read_response = app.oneshot(read_request).await.unwrap();
+    assert_eq!(read_response.status(), StatusCode::UNAUTHORIZED);
+
+    let app = test_router(state);
+    let write_request = Request::builder()
+        .method("POST")
+        .uri("/audit/events")
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            r#"{"event_type":"manual.test","outcome":"success"}"#,
+        ))
+        .unwrap();
+    let write_response = app.oneshot(write_request).await.unwrap();
+    assert_eq!(write_response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_login_failure_audit_metadata_is_sanitized() {
+    let state = test_state();
+    let email = "audit-sanitize@example.com";
+
+    let app = test_router(state.clone());
+    let signup_request = Request::builder()
+        .method("POST")
+        .uri("/signup")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", CSRF_COOKIE)
+        .header("X-Forwarded-For", "1.2.3.4")
+        .body(Body::from(form_body(email, "StrongP@ss123")))
+        .unwrap();
+    let signup_response = app.oneshot(signup_request).await.unwrap();
+    assert_eq!(signup_response.status(), StatusCode::OK);
+
+    let app = test_router(state.clone());
+    let failed_login = Request::builder()
+        .method("POST")
+        .uri("/login")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", CSRF_COOKIE)
+        .header("X-Forwarded-For", "1.2.3.4")
+        .body(Body::from(form_body(email, "WrongP@ssword1")))
+        .unwrap();
+    let failed_login_response = app.oneshot(failed_login).await.unwrap();
+    assert_eq!(failed_login_response.status(), StatusCode::SEE_OTHER);
+
+    let admin_session_cookie = create_admin_session_cookie(&state).await;
+
+    let app = test_router(state);
+    let list_request = Request::builder()
+        .method("GET")
+        .uri("/audit/events")
+        .header("Cookie", admin_session_cookie)
+        .body(Body::empty())
+        .unwrap();
+    let list_response = app.oneshot(list_request).await.unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(list_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let events: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let event = events
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|entry| {
+            entry["event_type"] == "auth.login"
+                && entry["outcome"] == "failure"
+                && entry["actor"] == email
+        })
+        .unwrap();
+
+    assert!(event["metadata"]["error_code"].is_string());
+    assert!(event["metadata"].get("error").is_none());
 }
 
 // --- Logout ---

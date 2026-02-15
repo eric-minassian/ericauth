@@ -1,3 +1,4 @@
+pub mod audit_event;
 pub mod auth_code;
 pub mod challenge;
 pub mod client;
@@ -14,6 +15,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use uuid::Uuid;
 
+use crate::audit::AuditEventRecord;
 use crate::error::AuthError;
 
 use self::auth_code::AuthCodeTable;
@@ -53,6 +55,7 @@ pub trait Database: Send + Sync {
         password_hash: String,
         updated_at: &str,
     ) -> Result<(), AuthError>;
+    async fn delete_user_by_id(&self, user_id: &str) -> Result<bool, AuthError>;
 
     // Session operations
     async fn insert_session(&self, new_session: NewSession) -> Result<(), AuthError>;
@@ -72,6 +75,7 @@ pub trait Database: Send + Sync {
         token_hash: &str,
     ) -> Result<Option<RefreshTokenTable>, AuthError>;
     async fn revoke_refresh_token(&self, token_hash: &str) -> Result<(), AuthError>;
+    async fn delete_refresh_tokens_by_user_id(&self, user_id: &str) -> Result<usize, AuthError>;
 
     // Credential operations
     async fn insert_credential(
@@ -115,6 +119,10 @@ pub trait Database: Send + Sync {
 
     // Rate limit operations
     async fn increment_rate_limit(&self, key: &str, window_seconds: i64) -> Result<i64, AuthError>;
+
+    // Audit event operations
+    async fn insert_audit_event(&self, event: AuditEventRecord) -> Result<(), AuthError>;
+    async fn list_audit_events(&self) -> Result<Vec<AuditEventRecord>, AuthError>;
 }
 
 /// DynamoDB-backed storage for production use.
@@ -132,6 +140,7 @@ pub struct DynamoDb {
     pub clients_table: String,
     pub auth_codes_table: String,
     pub rate_limits_table: String,
+    pub audit_events_table: String,
 }
 
 #[async_trait]
@@ -195,6 +204,10 @@ impl Database for DynamoDb {
         DynamoDb::update_password_hash(self, user_id, password_hash, updated_at).await
     }
 
+    async fn delete_user_by_id(&self, user_id: &str) -> Result<bool, AuthError> {
+        DynamoDb::delete_user_by_id(self, user_id).await
+    }
+
     async fn insert_session(&self, new_session: NewSession) -> Result<(), AuthError> {
         DynamoDb::insert_session(self, new_session).await
     }
@@ -232,6 +245,10 @@ impl Database for DynamoDb {
 
     async fn revoke_refresh_token(&self, token_hash: &str) -> Result<(), AuthError> {
         DynamoDb::revoke_refresh_token(self, token_hash).await
+    }
+
+    async fn delete_refresh_tokens_by_user_id(&self, user_id: &str) -> Result<usize, AuthError> {
+        DynamoDb::delete_refresh_tokens_by_user_id(self, user_id).await
     }
 
     async fn insert_credential(
@@ -304,6 +321,14 @@ impl Database for DynamoDb {
     async fn increment_rate_limit(&self, key: &str, window_seconds: i64) -> Result<i64, AuthError> {
         DynamoDb::increment_rate_limit(self, key, window_seconds).await
     }
+
+    async fn insert_audit_event(&self, event: AuditEventRecord) -> Result<(), AuthError> {
+        DynamoDb::insert_audit_event(self, &event).await
+    }
+
+    async fn list_audit_events(&self) -> Result<Vec<AuditEventRecord>, AuthError> {
+        DynamoDb::list_audit_events(self).await
+    }
 }
 
 #[async_trait]
@@ -367,6 +392,10 @@ impl Database for memory::MemoryDb {
         memory::MemoryDb::update_password_hash(self, user_id, password_hash, updated_at).await
     }
 
+    async fn delete_user_by_id(&self, user_id: &str) -> Result<bool, AuthError> {
+        memory::MemoryDb::delete_user_by_id(self, user_id).await
+    }
+
     async fn insert_session(&self, new_session: NewSession) -> Result<(), AuthError> {
         memory::MemoryDb::insert_session(self, new_session).await
     }
@@ -404,6 +433,10 @@ impl Database for memory::MemoryDb {
 
     async fn revoke_refresh_token(&self, token_hash: &str) -> Result<(), AuthError> {
         memory::MemoryDb::revoke_refresh_token(self, token_hash).await
+    }
+
+    async fn delete_refresh_tokens_by_user_id(&self, user_id: &str) -> Result<usize, AuthError> {
+        memory::MemoryDb::delete_refresh_tokens_by_user_id(self, user_id).await
     }
 
     async fn insert_credential(
@@ -475,6 +508,14 @@ impl Database for memory::MemoryDb {
     async fn increment_rate_limit(&self, key: &str, window_seconds: i64) -> Result<i64, AuthError> {
         memory::MemoryDb::increment_rate_limit(self, key, window_seconds).await
     }
+
+    async fn insert_audit_event(&self, event: AuditEventRecord) -> Result<(), AuthError> {
+        memory::MemoryDb::insert_audit_event(self, event).await
+    }
+
+    async fn list_audit_events(&self) -> Result<Vec<AuditEventRecord>, AuthError> {
+        memory::MemoryDb::list_audit_events(self).await
+    }
 }
 
 /// Create a DynamoDB-backed database, loading config from the environment.
@@ -504,12 +545,77 @@ pub async fn dynamo() -> Arc<dyn Database> {
             .unwrap_or_else(|_| "AuthCodesTable".to_string()),
         rate_limits_table: env::var("RATE_LIMITS_TABLE_NAME")
             .unwrap_or_else(|_| "RateLimitsTable".to_string()),
+        audit_events_table: env::var("AUDIT_EVENTS_TABLE_NAME")
+            .unwrap_or_else(|_| "AuditEventsTable".to_string()),
     })
 }
 
 /// Create an in-memory database for local development and testing.
 pub fn memory() -> Arc<dyn Database> {
     Arc::new(memory::MemoryDb::new())
+}
+
+pub struct AccountExportData {
+    pub user: UserTable,
+    pub sessions: Vec<SessionTable>,
+    pub credentials: Vec<CredentialTable>,
+}
+
+pub struct AccountDeleteSummary {
+    pub revoked_sessions: usize,
+    pub revoked_credentials: usize,
+    pub revoked_refresh_tokens: usize,
+    pub account_record_deleted: bool,
+}
+
+pub async fn export_account_data(
+    db: &dyn Database,
+    user_id: &str,
+) -> Result<AccountExportData, AuthError> {
+    let user = db
+        .get_user_by_id(user_id)
+        .await?
+        .ok_or_else(|| AuthError::NotFound("user not found".to_string()))?;
+
+    let sessions = db.get_sessions_by_user_id(user_id).await?;
+    let credentials = db.get_credentials_by_user_id(user_id).await?;
+
+    Ok(AccountExportData {
+        user,
+        sessions,
+        credentials,
+    })
+}
+
+pub async fn delete_account_data(
+    db: &dyn Database,
+    user_id: &str,
+) -> Result<AccountDeleteSummary, AuthError> {
+    let sessions = db.get_sessions_by_user_id(user_id).await?;
+    let revoked_sessions = sessions.len();
+    for session in sessions {
+        db.delete_session(&session.id).await?;
+    }
+
+    let credentials = db.get_credentials_by_user_id(user_id).await?;
+    let revoked_credentials = credentials.len();
+    for credential in credentials {
+        db.delete_credential(&credential.credential_id).await?;
+    }
+
+    let revoked_refresh_tokens = db.delete_refresh_tokens_by_user_id(user_id).await?;
+    let account_record_deleted = db.delete_user_by_id(user_id).await?;
+
+    Ok(AccountDeleteSummary {
+        revoked_sessions,
+        revoked_credentials,
+        revoked_refresh_tokens,
+        account_record_deleted,
+    })
+}
+
+pub async fn load_audit_evidence(db: &dyn Database) -> Result<Vec<AuditEventRecord>, AuthError> {
+    db.list_audit_events().await
 }
 
 /// Look up a session by raw token, verifying it hasn't expired.

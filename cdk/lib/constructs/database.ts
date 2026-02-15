@@ -10,6 +10,8 @@ interface DatabaseProps {
 export class Database extends Construct {
   public readonly usersTable: TableV2;
   public readonly sessionsTable: TableV2;
+  public readonly emailVerificationsTable: TableV2;
+  public readonly passwordResetsTable: TableV2;
   public readonly refreshTokensTable: TableV2;
   public readonly auditEventsTable: TableV2;
   public readonly credentialsTable: TableV2;
@@ -49,6 +51,24 @@ export class Database extends Construct {
           partitionKey: { name: "user_id", type: AttributeType.STRING },
         },
       ],
+      timeToLiveAttribute: "expires_at",
+      removalPolicy,
+    });
+
+    this.emailVerificationsTable = new TableV2(
+      this,
+      "EmailVerificationsTable",
+      {
+        tableName: `${prefix}-email-verifications`,
+        partitionKey: { name: "token", type: AttributeType.STRING },
+        timeToLiveAttribute: "expires_at",
+        removalPolicy,
+      },
+    );
+
+    this.passwordResetsTable = new TableV2(this, "PasswordResetsTable", {
+      tableName: `${prefix}-password-resets`,
+      partitionKey: { name: "token", type: AttributeType.STRING },
       timeToLiveAttribute: "expires_at",
       removalPolicy,
     });

@@ -63,10 +63,36 @@ test("creates tenants table", () => {
   });
 });
 
-test("creates exactly 9 DynamoDB tables", () => {
+test("creates email verifications table with TTL", () => {
+  const template = createTestStack();
+
+  template.hasResourceProperties("AWS::DynamoDB::GlobalTable", {
+    TableName: "ericauth-test-email-verifications",
+    KeySchema: [{ AttributeName: "token", KeyType: "HASH" }],
+    TimeToLiveSpecification: {
+      AttributeName: "expires_at",
+      Enabled: true,
+    },
+  });
+});
+
+test("creates password resets table with TTL", () => {
+  const template = createTestStack();
+
+  template.hasResourceProperties("AWS::DynamoDB::GlobalTable", {
+    TableName: "ericauth-test-password-resets",
+    KeySchema: [{ AttributeName: "token", KeyType: "HASH" }],
+    TimeToLiveSpecification: {
+      AttributeName: "expires_at",
+      Enabled: true,
+    },
+  });
+});
+
+test("creates exactly 12 DynamoDB tables", () => {
   const template = createTestStack();
   const tables = template.findResources("AWS::DynamoDB::GlobalTable");
-  expect(Object.keys(tables).length).toBe(9);
+  expect(Object.keys(tables).length).toBe(12);
 });
 
 // --- Lambda ---
@@ -80,9 +106,10 @@ test("creates Lambda function with table name env vars", () => {
         USERS_TABLE_NAME: Match.anyValue(),
         SESSIONS_TABLE_NAME: Match.anyValue(),
         REFRESH_TOKENS_TABLE_NAME: Match.anyValue(),
+        EMAIL_VERIFICATIONS_TABLE_NAME: Match.anyValue(),
+        PASSWORD_RESETS_TABLE_NAME: Match.anyValue(),
         AUDIT_EVENTS_TABLE_NAME: Match.anyValue(),
         TENANTS_TABLE_NAME: Match.anyValue(),
-        AUDIT_EVENTS_TABLE_NAME: Match.anyValue(),
       }),
     },
   });

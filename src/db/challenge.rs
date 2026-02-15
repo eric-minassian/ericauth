@@ -30,18 +30,26 @@ impl DynamoDb {
     }
 
     pub async fn get_and_delete_challenge(&self, challenge_id: &str) -> Result<String, AuthError> {
-        // Get the challenge
         let response = self
             .client
-            .get_item()
+            .delete_item()
             .table_name(&self.challenges_table)
             .key("challenge_id", AttributeValue::S(challenge_id.to_string()))
+            .condition_expression("attribute_exists(challenge_id)")
+            .return_values(aws_sdk_dynamodb::types::ReturnValue::AllOld)
             .send()
             .await
-            .map_err(|e| AuthError::Internal(format!("DynamoDB get challenge failed: {e}")))?;
+            .map_err(|e| {
+                let service_err = e.into_service_error();
+                if service_err.is_conditional_check_failed_exception() {
+                    AuthError::NotFound("challenge not found".into())
+                } else {
+                    AuthError::Internal(format!("DynamoDB delete challenge failed: {service_err}"))
+                }
+            })?;
 
         let item = response
-            .item
+            .attributes
             .ok_or_else(|| AuthError::NotFound("challenge not found".into()))?;
 
         // Check expiry
@@ -60,15 +68,6 @@ impl DynamoDb {
             .and_then(|v| v.as_s().ok())
             .ok_or_else(|| AuthError::Internal("invalid challenge data".into()))?
             .clone();
-
-        // Delete the challenge (single-use)
-        self.client
-            .delete_item()
-            .table_name(&self.challenges_table)
-            .key("challenge_id", AttributeValue::S(challenge_id.to_string()))
-            .send()
-            .await
-            .map_err(|e| AuthError::Internal(format!("Failed to delete challenge: {e}")))?;
 
         Ok(challenge_data)
     }

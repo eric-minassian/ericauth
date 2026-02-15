@@ -7,6 +7,7 @@ use axum::{
     Form,
 };
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::{
     audit::{append_event, auth_error_code, AuditEventInput, ERROR_CODE_KEY},
@@ -202,6 +203,33 @@ async fn try_login(
         return Err(AuthError::Unauthorized(
             "Invalid email or password".to_string(),
         ));
+    }
+
+    if user.mfa_totp_secret.is_some() {
+        let challenge_state = super::mfa::serialize_login_challenge_state(
+            user.id,
+            super::mfa::OauthContext {
+                client_id: body.client_id.clone(),
+                redirect_uri: body.redirect_uri.clone(),
+                response_type: body.response_type.clone(),
+                scope: body.scope.clone(),
+                state: body.state.clone(),
+                code_challenge: body.code_challenge.clone(),
+                code_challenge_method: body.code_challenge_method.clone(),
+                nonce: body.nonce.clone(),
+            },
+        )?;
+        let challenge_id = Uuid::new_v4().to_string();
+        state
+            .db
+            .insert_challenge(&challenge_id, &challenge_state, 300)
+            .await?;
+
+        return Ok(Redirect::to(&format!(
+            "/mfa/challenge?challenge_id={}",
+            urlencoding::encode(&challenge_id)
+        ))
+        .into_response());
     }
 
     // Create session

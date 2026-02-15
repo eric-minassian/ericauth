@@ -5,21 +5,25 @@ mod compliance;
 mod consent;
 pub(crate) mod events_webhook;
 mod favicon;
+mod forgot_password;
 mod health;
 mod jwks;
 mod login;
 mod login_page;
 mod logout;
+mod mfa;
 mod openid_config;
 mod passkey;
 mod passkeys_page;
 mod recover;
 mod recover_page;
+mod reset_password;
 mod signup;
 mod signup_page;
 mod token;
 mod token_revoke;
 mod userinfo;
+mod verify_email;
 
 use std::env;
 
@@ -91,9 +95,22 @@ pub fn router(state: AppState) -> Router {
         .route("/signup", get(signup_page::handler).post(signup::handler))
         .route("/login", get(login_page::handler).post(login::handler))
         .route(
+            "/forgot-password",
+            get(forgot_password::get_handler).post(forgot_password::post_handler),
+        )
+        .route(
+            "/reset-password",
+            get(reset_password::get_handler).post(reset_password::post_handler),
+        )
+        .route(
             "/recover",
             get(recover_page::handler).post(recover::handler),
         )
+        .route(
+            "/mfa/challenge",
+            get(mfa::challenge_get_handler).post(mfa::challenge_post_handler),
+        )
+        .route("/verify-email", get(verify_email::handler))
         .route("/passkeys/auth/begin", post(passkey::auth_begin))
         .layer(middleware::from_fn_with_state(
             state.clone(),
@@ -149,6 +166,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/account/recovery-codes/regenerate",
             post(account::regenerate_recovery_codes_handler),
+        )
+        .route(
+            "/mfa/setup",
+            get(mfa::setup_get_handler).post(mfa::setup_post_handler),
         )
         .route("/passkeys/register/begin", post(passkey::register_begin))
         .route(

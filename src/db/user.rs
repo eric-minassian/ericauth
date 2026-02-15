@@ -19,6 +19,8 @@ pub struct UserTable {
     pub scopes: Vec<String>,
     #[serde(default)]
     pub recovery_codes: Vec<String>,
+    #[serde(default)]
+    pub mfa_totp_secret: Option<String>,
 }
 
 impl DynamoDb {
@@ -60,6 +62,7 @@ impl DynamoDb {
             updated_at,
             scopes,
             recovery_codes,
+            mfa_totp_secret: None,
         };
 
         let item = to_item(&user)
@@ -211,6 +214,38 @@ impl DynamoDb {
             .send()
             .await
             .map_err(|e| AuthError::Internal(format!("Failed to update password hash: {e}")))?;
+
+        Ok(())
+    }
+
+    pub async fn update_mfa_totp_secret(
+        &self,
+        user_id: &str,
+        mfa_totp_secret: Option<String>,
+        updated_at: &str,
+    ) -> Result<(), AuthError> {
+        let mut update_item = self
+            .client
+            .update_item()
+            .table_name(&self.users_table)
+            .key("id", AttributeValue::S(user_id.to_string()))
+            .expression_attribute_values(":updated_at", AttributeValue::S(updated_at.to_string()));
+
+        if let Some(secret) = mfa_totp_secret {
+            update_item = update_item
+                .update_expression(
+                    "SET mfa_totp_secret = :mfa_totp_secret, updated_at = :updated_at",
+                )
+                .expression_attribute_values(":mfa_totp_secret", AttributeValue::S(secret));
+        } else {
+            update_item = update_item
+                .update_expression("REMOVE mfa_totp_secret SET updated_at = :updated_at");
+        }
+
+        update_item
+            .send()
+            .await
+            .map_err(|e| AuthError::Internal(format!("Failed to update MFA TOTP secret: {e}")))?;
 
         Ok(())
     }

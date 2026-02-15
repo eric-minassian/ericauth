@@ -4,6 +4,7 @@ pub mod db;
 pub mod encryption;
 pub mod error;
 pub mod jwt;
+pub mod mfa;
 pub mod middleware;
 pub mod oauth;
 pub mod password;

@@ -7,13 +7,34 @@
 <h1>Admin Console</h1>
 <p class="subtitle">Users</p>
 
-<div class="actions">
+<div class="actions" style="flex-direction: row; flex-wrap: wrap; margin-bottom: 1rem;">
     <a class="btn btn-secondary btn-sm" href="/admin/console/tenants">Tenants</a>
     <a class="btn btn-secondary btn-sm" href="/admin/console/clients">Clients</a>
     <a class="btn btn-secondary btn-sm" href="/admin/console/users">Users</a>
     <a class="btn btn-secondary btn-sm" href="/admin/console/policies">Policies</a>
 </div>
 
+{% if let Some(msg) = error %}
+<div class="error-msg">{{ msg }}</div>
+{% endif %}
+
+<form method="GET" action="/admin/console/users">
+    <label for="user_id">User ID</label>
+    <input id="user_id" type="text" name="user_id" placeholder="UUID" {% if let Some(value) = user_id %}value="{{ value }}"{% endif %}>
+    <label for="email">Email</label>
+    <input id="email" type="email" name="email" placeholder="user@example.com" {% if let Some(value) = email %}value="{{ value }}"{% endif %}>
+    <button type="submit" class="btn btn-primary">Lookup user</button>
+</form>
+
+{% if let Some(user) = lookup_result %}
 <hr class="divider">
-<p class="subtitle">User management page scaffolded for Task 10.</p>
+<h2 style="font-size: 0.95rem; margin-bottom: 0.5rem;">User details</h2>
+<p><strong>ID:</strong> {{ user.id }}</p>
+<p><strong>Email:</strong> {{ user.email }}</p>
+<p><strong>Created:</strong> {{ user.created_at }}</p>
+<p><strong>Updated:</strong> {{ user.updated_at }}</p>
+<p><strong>Scopes:</strong> {{ user.scopes }}</p>
+<p><strong>Password login:</strong> {% if user.has_password_login %}Enabled{% else %}Disabled{% endif %}</p>
+<p><strong>MFA:</strong> {% if user.has_mfa %}Configured{% else %}Not configured{% endif %}</p>
+{% endif %}
 {% endblock %}

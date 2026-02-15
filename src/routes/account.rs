@@ -41,6 +41,7 @@ struct AccountTemplate {
     passkey_count: usize,
     recovery_codes_remaining: usize,
     session_count: usize,
+    api_key_count: usize,
     notice: Option<String>,
     error: Option<String>,
 }
@@ -114,6 +115,12 @@ pub async fn handler(
         .await?
         .len();
 
+    let api_key_count = state
+        .db
+        .get_api_keys_by_user_id(&user.user_id.to_string())
+        .await?
+        .len();
+
     render(&AccountTemplate {
         csrf_token: csrf.0,
         email: user_record.email,
@@ -121,6 +128,7 @@ pub async fn handler(
         passkey_count: credentials.len(),
         recovery_codes_remaining: user_record.recovery_codes.len(),
         session_count,
+        api_key_count,
         notice: map_notice(query.notice),
         error: map_error(query.error),
     })

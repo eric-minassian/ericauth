@@ -8,7 +8,9 @@ use crate::{
 
 #[derive(Deserialize)]
 pub struct LoginPageQuery {
+    notice: Option<String>,
     error: Option<String>,
+    verified: Option<String>,
     email: Option<String>,
     redirect_uri: Option<String>,
     state: Option<String>,
@@ -24,6 +26,7 @@ pub struct LoginPageQuery {
 #[template(path = "login.html")]
 struct LoginTemplate {
     csrf_token: String,
+    notice: Option<String>,
     error: Option<String>,
     email: Option<String>,
     redirect_uri: Option<String>,
@@ -54,7 +57,8 @@ pub async fn handler(
 
     render(&LoginTemplate {
         csrf_token: csrf.0,
-        error: params.error,
+        notice: map_notice(params.notice, params.verified),
+        error: map_error(params.error),
         email: params.email,
         redirect_uri: params.redirect_uri,
         state: params.state,
@@ -66,4 +70,22 @@ pub async fn handler(
         nonce: params.nonce,
         oauth_query,
     })
+}
+
+fn map_notice(notice: Option<String>, verified: Option<String>) -> Option<String> {
+    if verified.as_deref() == Some("1") {
+        return Some("Email verified. You can sign in now.".to_string());
+    }
+
+    match notice.as_deref() {
+        Some("email_verified") => Some("Email verified. You can sign in now.".to_string()),
+        Some("account_deleted") => {
+            Some("Account deletion accepted. You have been signed out.".to_string())
+        }
+        _ => None,
+    }
+}
+
+fn map_error(error: Option<String>) -> Option<String> {
+    error.filter(|value| !value.trim().is_empty())
 }

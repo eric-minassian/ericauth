@@ -1,4 +1,9 @@
-use axum::{extract::State, Json};
+use askama::Template;
+use axum::{
+    extract::{Query, State},
+    response::{IntoResponse, Redirect, Response},
+    Extension, Form, Json,
+};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -6,9 +11,41 @@ use sha2::{digest::Update, Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
-    db::api_key::ApiKeyTable, error::AuthError, middleware::auth::AuthenticatedUser,
+    db::api_key::ApiKeyTable,
+    error::AuthError,
+    middleware::{auth::AuthenticatedUser, csrf::CsrfToken},
     state::AppState,
+    templates::render,
 };
+
+#[derive(Deserialize)]
+pub struct ApiKeysPageQuery {
+    notice: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateApiKeyForm {
+    pub name: String,
+    pub csrf_token: String,
+}
+
+#[derive(Deserialize)]
+pub struct RevokeApiKeyForm {
+    pub key_id: String,
+    #[serde(rename = "csrf_token")]
+    _csrf_token: Option<String>,
+}
+
+#[derive(Template)]
+#[template(path = "account_api_keys.html")]
+struct ApiKeysTemplate {
+    csrf_token: String,
+    api_keys: Vec<ApiKeyResponse>,
+    newly_created_key: Option<String>,
+    notice: Option<String>,
+    error: Option<String>,
+}
 
 #[derive(Deserialize)]
 pub struct CreateApiKeyPayload {
@@ -42,43 +79,78 @@ pub struct RevokeApiKeyResponse {
     pub revoked_at: String,
 }
 
+pub async fn page_handler(
+    Extension(csrf): Extension<CsrfToken>,
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Query(query): Query<ApiKeysPageQuery>,
+) -> Result<impl IntoResponse, AuthError> {
+    render_page(
+        &state,
+        &user,
+        csrf.0,
+        None,
+        map_notice(query.notice),
+        map_error(query.error),
+    )
+    .await
+}
+
+pub async fn create_form_handler(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Form(body): Form<CreateApiKeyForm>,
+) -> Response {
+    match try_create_from_form(&state, &user, &body).await {
+        Ok(response) => match render_page(
+            &state,
+            &user,
+            body.csrf_token,
+            response.api_key,
+            Some("API key created. Copy it now - it will not be shown again.".to_string()),
+            None,
+        )
+        .await
+        {
+            Ok(html) => html.into_response(),
+            Err(_) => Redirect::to(
+                "/account/api-keys/manage?error=Failed%20to%20render%20API%20keys%20page",
+            )
+            .into_response(),
+        },
+        Err(err) => Redirect::to(&format!(
+            "/account/api-keys/manage?error={}",
+            urlencoding::encode(user_safe_error(&err))
+        ))
+        .into_response(),
+    }
+}
+
+pub async fn revoke_form_handler(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Form(body): Form<RevokeApiKeyForm>,
+) -> Response {
+    let payload = RevokeApiKeyPayload {
+        key_id: body.key_id,
+    };
+
+    match revoke_from_payload(state, user, payload).await {
+        Ok(_) => Redirect::to("/account/api-keys/manage?notice=key_revoked").into_response(),
+        Err(err) => Redirect::to(&format!(
+            "/account/api-keys/manage?error={}",
+            urlencoding::encode(user_safe_error(&err))
+        ))
+        .into_response(),
+    }
+}
+
 pub async fn create_handler(
     State(state): State<AppState>,
     user: AuthenticatedUser,
     Json(body): Json<CreateApiKeyPayload>,
 ) -> Result<Json<ApiKeyResponse>, AuthError> {
-    let name = body.name.trim();
-    if name.is_empty() {
-        return Err(AuthError::BadRequest(
-            "API key name is required".to_string(),
-        ));
-    }
-
-    let plaintext_key = generate_api_key()?;
-    let key_hash = hex::encode(Sha256::new().chain(plaintext_key.as_bytes()).finalize());
-    let key_id = Uuid::new_v4().to_string();
-    let created_at = Utc::now().to_rfc3339();
-
-    let record = ApiKeyTable {
-        key_id: key_id.clone(),
-        user_id: user.user_id.to_string(),
-        name: name.to_string(),
-        key_hash,
-        created_at: created_at.clone(),
-        last_used_at: None,
-        revoked_at: None,
-    };
-
-    state.db.insert_api_key(&record).await?;
-
-    Ok(Json(ApiKeyResponse {
-        key_id,
-        name: record.name,
-        created_at,
-        last_used_at: None,
-        revoked_at: None,
-        api_key: Some(plaintext_key),
-    }))
+    Ok(Json(create_from_name(&state, &user, &body.name).await?))
 }
 
 pub async fn list_handler(
@@ -111,6 +183,16 @@ pub async fn revoke_handler(
     user: AuthenticatedUser,
     Json(body): Json<RevokeApiKeyPayload>,
 ) -> Result<Json<RevokeApiKeyResponse>, AuthError> {
+    let response = revoke_from_payload(state, user, body).await?;
+
+    Ok(Json(response))
+}
+
+async fn revoke_from_payload(
+    state: AppState,
+    user: AuthenticatedUser,
+    body: RevokeApiKeyPayload,
+) -> Result<RevokeApiKeyResponse, AuthError> {
     if body.key_id.trim().is_empty() {
         return Err(AuthError::BadRequest("API key id is required".to_string()));
     }
@@ -121,10 +203,119 @@ pub async fn revoke_handler(
         .revoke_api_key(&body.key_id, &user.user_id.to_string(), &revoked_at)
         .await?;
 
-    Ok(Json(RevokeApiKeyResponse {
+    Ok(RevokeApiKeyResponse {
         key_id: body.key_id,
         revoked_at,
-    }))
+    })
+}
+
+async fn try_create_from_form(
+    state: &AppState,
+    user: &AuthenticatedUser,
+    body: &CreateApiKeyForm,
+) -> Result<ApiKeyResponse, AuthError> {
+    create_from_name(state, user, &body.name).await
+}
+
+async fn create_from_name(
+    state: &AppState,
+    user: &AuthenticatedUser,
+    name: &str,
+) -> Result<ApiKeyResponse, AuthError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(AuthError::BadRequest(
+            "API key name is required".to_string(),
+        ));
+    }
+
+    let plaintext_key = generate_api_key()?;
+    let key_hash = hex::encode(Sha256::new().chain(plaintext_key.as_bytes()).finalize());
+    let key_id = Uuid::new_v4().to_string();
+    let created_at = Utc::now().to_rfc3339();
+
+    let record = ApiKeyTable {
+        key_id: key_id.clone(),
+        user_id: user.user_id.to_string(),
+        name: name.to_string(),
+        key_hash,
+        created_at: created_at.clone(),
+        last_used_at: None,
+        revoked_at: None,
+    };
+
+    state.db.insert_api_key(&record).await?;
+
+    Ok(ApiKeyResponse {
+        key_id,
+        name: record.name,
+        created_at,
+        last_used_at: None,
+        revoked_at: None,
+        api_key: Some(plaintext_key),
+    })
+}
+
+async fn list_api_keys(
+    state: &AppState,
+    user: &AuthenticatedUser,
+) -> Result<Vec<ApiKeyResponse>, AuthError> {
+    let mut api_keys = state
+        .db
+        .get_api_keys_by_user_id(&user.user_id.to_string())
+        .await?;
+    api_keys.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+    Ok(api_keys
+        .into_iter()
+        .map(|api_key| ApiKeyResponse {
+            key_id: api_key.key_id,
+            name: api_key.name,
+            created_at: api_key.created_at,
+            last_used_at: api_key.last_used_at,
+            revoked_at: api_key.revoked_at,
+            api_key: None,
+        })
+        .collect())
+}
+
+async fn render_page(
+    state: &AppState,
+    user: &AuthenticatedUser,
+    csrf_token: String,
+    newly_created_key: Option<String>,
+    notice: Option<String>,
+    error: Option<String>,
+) -> Result<impl IntoResponse, AuthError> {
+    render(&ApiKeysTemplate {
+        csrf_token,
+        api_keys: list_api_keys(state, user).await?,
+        newly_created_key,
+        notice,
+        error,
+    })
+}
+
+fn map_notice(notice: Option<String>) -> Option<String> {
+    match notice.as_deref() {
+        Some("key_revoked") => Some("API key revoked.".to_string()),
+        _ => None,
+    }
+}
+
+fn map_error(error: Option<String>) -> Option<String> {
+    error.filter(|value| !value.trim().is_empty())
+}
+
+fn user_safe_error(error: &AuthError) -> &str {
+    match error {
+        AuthError::BadRequest(_) => "Invalid API key request",
+        AuthError::NotFound(_) => "API key not found",
+        AuthError::Unauthorized(_) | AuthError::Forbidden(_) => "You are not authorized",
+        AuthError::Conflict(_) => "Unable to update API key",
+        AuthError::Internal(_) => "Unable to process API keys right now",
+        AuthError::TooManyRequests(_) => "Too many requests; try again shortly",
+    }
 }
 
 fn generate_api_key() -> Result<String, AuthError> {
@@ -143,13 +334,13 @@ mod tests {
         body::Body,
         http::{Request, StatusCode},
         routing::post,
-        Router,
+        Extension, Router,
     };
     use lambda_http::tower::ServiceExt;
     use serde_json::Value;
     use sha2::{digest::Update, Digest, Sha256};
 
-    use crate::{db::session::NewSession, state::AppState};
+    use crate::{db::session::NewSession, middleware::csrf::CsrfToken, state::AppState};
 
     async fn test_state_with_auth() -> (AppState, String) {
         let state = AppState {
@@ -228,6 +419,10 @@ mod tests {
         Router::new()
             .route("/account/api-keys", post(create_handler).get(list_handler))
             .route("/account/api-keys/revoke", post(revoke_handler))
+            .route("/account/api-keys/manage", axum::routing::get(page_handler))
+            .route("/account/api-keys/manage/create", post(create_form_handler))
+            .route("/account/api-keys/manage/revoke", post(revoke_form_handler))
+            .layer(Extension(CsrfToken("test-csrf-token".to_string())))
             .with_state(state)
     }
 
@@ -451,5 +646,62 @@ mod tests {
         assert_eq!(api_keys.len(), 1);
         assert_eq!(api_keys[0]["key_id"], key_id);
         assert_eq!(api_keys[0]["revoked_at"], first_revoked_at);
+    }
+
+    #[tokio::test]
+    async fn test_api_keys_manage_page_and_form_handlers() {
+        let (state, session_token) = test_state_with_auth().await;
+        let app = test_router(state.clone());
+
+        let page_request = Request::builder()
+            .method("GET")
+            .uri("/account/api-keys/manage")
+            .header("cookie", format!("session={session_token}"))
+            .body(Body::empty())
+            .unwrap();
+        let page_response = app.clone().oneshot(page_request).await.unwrap();
+        assert_eq!(page_response.status(), StatusCode::OK);
+
+        let create_request = Request::builder()
+            .method("POST")
+            .uri("/account/api-keys/manage/create")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .header(
+                "cookie",
+                format!("session={session_token}; __csrf=test-csrf-token"),
+            )
+            .body(Body::from("name=UI+key&csrf_token=test-csrf-token"))
+            .unwrap();
+        let create_response = app.clone().oneshot(create_request).await.unwrap();
+        assert_eq!(create_response.status(), StatusCode::OK);
+
+        let list_request = Request::builder()
+            .method("GET")
+            .uri("/account/api-keys")
+            .header("cookie", format!("session={session_token}"))
+            .body(Body::empty())
+            .unwrap();
+        let list_response = app.clone().oneshot(list_request).await.unwrap();
+        assert_eq!(list_response.status(), StatusCode::OK);
+        let list_json = response_json(list_response).await;
+        let key_id = list_json["api_keys"][0]["key_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let revoke_request = Request::builder()
+            .method("POST")
+            .uri("/account/api-keys/manage/revoke")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .header(
+                "cookie",
+                format!("session={session_token}; __csrf=test-csrf-token"),
+            )
+            .body(Body::from(format!(
+                "key_id={}&csrf_token=test-csrf-token",
+                urlencoding::encode(&key_id)
+            )))
+            .unwrap();
+        let revoke_response = app.oneshot(revoke_request).await.unwrap();
+        assert_eq!(revoke_response.status(), StatusCode::SEE_OTHER);
     }
 }

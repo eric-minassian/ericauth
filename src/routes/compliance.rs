@@ -1,14 +1,50 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use serde::Serialize;
+use askama::Template;
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+    response::{IntoResponse, Redirect, Response},
+    Extension, Form, Json,
+};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     admin_rbac::{has_admin_permission, AdminPermission},
     audit::{append_event, AuditEventInput},
     db,
     error::AuthError,
-    middleware::auth::AuthenticatedUser,
+    middleware::{auth::AuthenticatedUser, csrf::CsrfToken},
     state::AppState,
+    templates::render,
 };
+
+#[derive(Deserialize)]
+pub struct CompliancePageQuery {
+    notice: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct ComplianceActionForm {
+    pub csrf_token: String,
+}
+
+#[derive(Deserialize)]
+pub struct DeleteAccountForm {
+    pub confirm: String,
+    #[serde(rename = "csrf_token")]
+    _csrf_token: Option<String>,
+}
+
+#[derive(Template)]
+#[template(path = "account_compliance.html")]
+struct ComplianceTemplate {
+    csrf_token: String,
+    can_view_audit_evidence: bool,
+    notice: Option<String>,
+    error: Option<String>,
+    export_data: Option<String>,
+    audit_evidence: Option<String>,
+}
 
 #[derive(Serialize)]
 pub struct AccountExportResponse {
@@ -47,10 +83,143 @@ pub struct AccountDeleteResponse {
     account_record_deleted: bool,
 }
 
+pub async fn page_handler(
+    Extension(csrf): Extension<CsrfToken>,
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Query(query): Query<CompliancePageQuery>,
+) -> Result<impl IntoResponse, AuthError> {
+    render_page(
+        &state,
+        &user,
+        csrf.0,
+        map_notice(query.notice),
+        map_error(query.error),
+        None,
+        None,
+    )
+    .await
+}
+
+pub async fn export_form_handler(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Form(body): Form<ComplianceActionForm>,
+) -> Response {
+    match build_account_export_response(&state, &user).await {
+        Ok(exported) => {
+            let export_data = serde_json::to_string_pretty(&exported).ok();
+            match render_page(
+                &state,
+                &user,
+                body.csrf_token,
+                Some("Account export generated.".to_string()),
+                None,
+                export_data,
+                None,
+            )
+            .await
+            {
+                Ok(html) => html.into_response(),
+                Err(_) => Redirect::to(
+                    "/account/compliance?error=Failed%20to%20render%20compliance%20page",
+                )
+                .into_response(),
+            }
+        }
+        Err(err) => Redirect::to(&format!(
+            "/account/compliance?error={}",
+            urlencoding::encode(user_safe_error(&err))
+        ))
+        .into_response(),
+    }
+}
+
+pub async fn delete_form_handler(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Form(body): Form<DeleteAccountForm>,
+) -> Response {
+    if body.confirm.trim() != "DELETE" {
+        return Redirect::to(
+            "/account/compliance?error=Type%20DELETE%20to%20confirm%20account%20deletion",
+        )
+        .into_response();
+    }
+
+    match delete_account(&state, &user).await {
+        Ok(_) => Redirect::to("/login?notice=account_deleted").into_response(),
+        Err(err) => Redirect::to(&format!(
+            "/account/compliance?error={}",
+            urlencoding::encode(user_safe_error(&err))
+        ))
+        .into_response(),
+    }
+}
+
+pub async fn audit_evidence_form_handler(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Form(body): Form<ComplianceActionForm>,
+) -> Response {
+    match load_audit_evidence_for_user(&state, &user).await {
+        Ok(events) => {
+            let evidence = serde_json::to_string_pretty(&events).ok();
+            match render_page(
+                &state,
+                &user,
+                body.csrf_token,
+                Some("Audit evidence loaded.".to_string()),
+                None,
+                None,
+                evidence,
+            )
+            .await
+            {
+                Ok(html) => html.into_response(),
+                Err(_) => Redirect::to(
+                    "/account/compliance?error=Failed%20to%20render%20compliance%20page",
+                )
+                .into_response(),
+            }
+        }
+        Err(err) => Redirect::to(&format!(
+            "/account/compliance?error={}",
+            urlencoding::encode(user_safe_error(&err))
+        ))
+        .into_response(),
+    }
+}
+
 pub async fn account_export_handler(
     State(state): State<AppState>,
     user: AuthenticatedUser,
 ) -> Result<impl IntoResponse, AuthError> {
+    let response = build_account_export_response(&state, &user).await?;
+
+    Ok((StatusCode::OK, Json(response)))
+}
+
+pub async fn account_delete_handler(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+) -> Result<impl IntoResponse, AuthError> {
+    let response = delete_account(&state, &user).await?;
+
+    Ok((StatusCode::ACCEPTED, Json(response)))
+}
+
+pub async fn audit_evidence_handler(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+) -> Result<impl IntoResponse, AuthError> {
+    Ok(Json(load_audit_evidence_for_user(&state, &user).await?))
+}
+
+async fn build_account_export_response(
+    state: &AppState,
+    user: &AuthenticatedUser,
+) -> Result<AccountExportResponse, AuthError> {
     let exported = db::export_account_data(state.db.as_ref(), &user.user_id.to_string()).await?;
 
     append_event(
@@ -66,7 +235,7 @@ pub async fn account_export_handler(
     )
     .await?;
 
-    let response = AccountExportResponse {
+    Ok(AccountExportResponse {
         user_id: exported.user.id.to_string(),
         email: exported.user.email,
         created_at: exported.user.created_at,
@@ -94,15 +263,13 @@ pub async fn account_export_handler(
                 last_used_at: credential.last_used_at,
             })
             .collect(),
-    };
-
-    Ok((StatusCode::OK, Json(response)))
+    })
 }
 
-pub async fn account_delete_handler(
-    State(state): State<AppState>,
-    user: AuthenticatedUser,
-) -> Result<impl IntoResponse, AuthError> {
+async fn delete_account(
+    state: &AppState,
+    user: &AuthenticatedUser,
+) -> Result<AccountDeleteResponse, AuthError> {
     let summary = db::delete_account_data(state.db.as_ref(), &user.user_id.to_string()).await?;
 
     append_event(
@@ -118,21 +285,18 @@ pub async fn account_delete_handler(
     )
     .await?;
 
-    Ok((
-        StatusCode::ACCEPTED,
-        Json(AccountDeleteResponse {
-            status: "accepted",
-            revoked_sessions: summary.revoked_sessions,
-            revoked_credentials: summary.revoked_credentials,
-            account_record_deleted: summary.account_record_deleted,
-        }),
-    ))
+    Ok(AccountDeleteResponse {
+        status: "accepted",
+        revoked_sessions: summary.revoked_sessions,
+        revoked_credentials: summary.revoked_credentials,
+        account_record_deleted: summary.account_record_deleted,
+    })
 }
 
-pub async fn audit_evidence_handler(
-    State(state): State<AppState>,
-    user: AuthenticatedUser,
-) -> Result<impl IntoResponse, AuthError> {
+async fn load_audit_evidence_for_user(
+    state: &AppState,
+    user: &AuthenticatedUser,
+) -> Result<Vec<crate::audit::AuditEventRecord>, AuthError> {
     let user_record = state
         .db
         .get_user_by_id(&user.user_id.to_string())
@@ -143,7 +307,55 @@ pub async fn audit_evidence_handler(
         return Err(AuthError::Forbidden("insufficient_scope".to_string()));
     }
 
-    Ok(Json(db::load_audit_evidence(state.db.as_ref()).await?))
+    db::load_audit_evidence(state.db.as_ref()).await
+}
+
+async fn render_page(
+    state: &AppState,
+    user: &AuthenticatedUser,
+    csrf_token: String,
+    notice: Option<String>,
+    error: Option<String>,
+    export_data: Option<String>,
+    audit_evidence: Option<String>,
+) -> Result<impl IntoResponse, AuthError> {
+    let user_record = state
+        .db
+        .get_user_by_id(&user.user_id.to_string())
+        .await?
+        .ok_or_else(|| AuthError::Unauthorized("user not found".to_string()))?;
+
+    render(&ComplianceTemplate {
+        csrf_token,
+        can_view_audit_evidence: has_admin_permission(
+            &user_record.scopes,
+            AdminPermission::ReadAuditEvents,
+        ),
+        notice,
+        error,
+        export_data,
+        audit_evidence,
+    })
+}
+
+fn map_notice(notice: Option<String>) -> Option<String> {
+    notice.filter(|value| !value.trim().is_empty())
+}
+
+fn map_error(error: Option<String>) -> Option<String> {
+    error.filter(|value| !value.trim().is_empty())
+}
+
+fn user_safe_error(error: &AuthError) -> &str {
+    match error {
+        AuthError::Unauthorized(_) => "Authentication required",
+        AuthError::Forbidden(_) => "You do not have permission for this action",
+        AuthError::NotFound(_) => "Account not found",
+        AuthError::BadRequest(_) => "Invalid compliance request",
+        AuthError::Conflict(_) => "Unable to process compliance action",
+        AuthError::Internal(_) => "Unable to process compliance action right now",
+        AuthError::TooManyRequests(_) => "Too many requests; try again shortly",
+    }
 }
 
 #[cfg(test)]
@@ -156,7 +368,7 @@ mod tests {
         body::Body,
         http::{Request, StatusCode},
         routing::{get, post},
-        Router,
+        Extension, Router,
     };
     use lambda_http::tower::ServiceExt;
 
@@ -164,6 +376,7 @@ mod tests {
         audit::{append_event, AuditEventInput},
         db::refresh_token::RefreshTokenTable,
         jwt::{generate_es256_keypair, JwtKeys},
+        middleware::csrf::CsrfToken,
         session::{create_session, generate_session_token},
         state::AppState,
     };
@@ -181,9 +394,17 @@ mod tests {
 
     fn test_router(state: AppState) -> Router {
         Router::new()
+            .route("/account/compliance", get(page_handler))
+            .route("/account/compliance/export", post(export_form_handler))
+            .route("/account/compliance/delete", post(delete_form_handler))
+            .route(
+                "/account/compliance/audit-evidence",
+                post(audit_evidence_form_handler),
+            )
             .route("/compliance/account/export", get(account_export_handler))
             .route("/compliance/account/delete", post(account_delete_handler))
             .route("/compliance/audit/evidence", get(audit_evidence_handler))
+            .layer(Extension(CsrfToken("test-csrf-token".to_string())))
             .with_state(state)
     }
 
@@ -385,5 +606,35 @@ mod tests {
             .unwrap();
         let events: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert!(events.as_array().is_some_and(|items| !items.is_empty()));
+    }
+
+    #[tokio::test]
+    async fn test_delete_form_requires_literal_delete_confirmation() {
+        let state = test_state();
+        let (cookie, _) = create_session_cookie(
+            &state,
+            "delete-form@example.com",
+            vec!["openid".to_string()],
+        )
+        .await;
+
+        let app = test_router(state);
+        let request = Request::builder()
+            .method("POST")
+            .uri("/account/compliance/delete")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .header("Cookie", format!("{cookie}; __csrf=test-csrf-token"))
+            .body(Body::from("confirm=delete&csrf_token=test-csrf-token"))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let location = response
+            .headers()
+            .get(axum::http::header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(location.contains("Type%20DELETE%20to%20confirm%20account%20deletion"));
     }
 }

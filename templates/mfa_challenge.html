@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Verify MFA - EricAuth{% endblock %}
+
+{% block content %}
+<h1>Verify your sign in</h1>
+<p class="subtitle">Enter a 6-digit authenticator code or one of your backup codes.</p>
+
+{% if let Some(err) = error %}
+<div class="error-msg">{{ err }}</div>
+{% endif %}
+
+<form method="POST" action="/mfa/challenge">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="challenge_id" value="{{ challenge_id }}">
+
+    <label for="code">Authentication or backup code</label>
+    <input type="text" id="code" name="code" required autocomplete="one-time-code" placeholder="123456">
+
+    <button type="submit" class="btn btn-primary">Continue</button>
+</form>
+{% endblock %}

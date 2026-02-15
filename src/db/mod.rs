@@ -3,7 +3,9 @@ pub mod auth_code;
 pub mod challenge;
 pub mod client;
 pub mod credential;
+pub mod email_verification;
 pub mod memory;
+pub mod password_reset;
 pub mod rate_limit;
 pub mod refresh_token;
 pub mod session;
@@ -21,6 +23,8 @@ use crate::error::AuthError;
 use self::auth_code::AuthCodeTable;
 use self::client::ClientTable;
 use self::credential::CredentialTable;
+use self::email_verification::EmailVerificationTable;
+use self::password_reset::PasswordResetTable;
 use self::refresh_token::RefreshTokenTable;
 use self::session::{NewSession, SessionTable};
 use self::user::UserTable;
@@ -55,6 +59,36 @@ pub trait Database: Send + Sync {
         password_hash: String,
         updated_at: &str,
     ) -> Result<(), AuthError>;
+    async fn update_mfa_totp_secret(
+        &self,
+        user_id: &str,
+        mfa_totp_secret: Option<String>,
+        updated_at: &str,
+    ) -> Result<(), AuthError>;
+    async fn insert_email_verification(
+        &self,
+        token: &str,
+        user_id: &str,
+        ttl_seconds: i64,
+    ) -> Result<(), AuthError>;
+    async fn get_email_verification_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<EmailVerificationTable>, AuthError>;
+    async fn redeem_email_verification(
+        &self,
+        token: &str,
+    ) -> Result<Option<EmailVerificationTable>, AuthError>;
+    async fn insert_password_reset_token(
+        &self,
+        token: &str,
+        user_id: &str,
+        ttl_seconds: i64,
+    ) -> Result<(), AuthError>;
+    async fn redeem_password_reset_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<PasswordResetTable>, AuthError>;
     async fn delete_user_by_id(&self, user_id: &str) -> Result<bool, AuthError>;
 
     // Session operations
@@ -133,6 +167,8 @@ pub struct DynamoDb {
     pub users_email_index: String,
     pub sessions_table: String,
     pub sessions_user_id_index: String,
+    pub email_verifications_table: String,
+    pub password_resets_table: String,
     pub refresh_tokens_table: String,
     pub credentials_table: String,
     pub credentials_user_id_index: String,
@@ -202,6 +238,54 @@ impl Database for DynamoDb {
         updated_at: &str,
     ) -> Result<(), AuthError> {
         DynamoDb::update_password_hash(self, user_id, password_hash, updated_at).await
+    }
+
+    async fn update_mfa_totp_secret(
+        &self,
+        user_id: &str,
+        mfa_totp_secret: Option<String>,
+        updated_at: &str,
+    ) -> Result<(), AuthError> {
+        DynamoDb::update_mfa_totp_secret(self, user_id, mfa_totp_secret, updated_at).await
+    }
+
+    async fn insert_email_verification(
+        &self,
+        token: &str,
+        user_id: &str,
+        ttl_seconds: i64,
+    ) -> Result<(), AuthError> {
+        DynamoDb::insert_email_verification(self, token, user_id, ttl_seconds).await
+    }
+
+    async fn get_email_verification_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<EmailVerificationTable>, AuthError> {
+        DynamoDb::get_email_verification_by_user_id(self, user_id).await
+    }
+
+    async fn redeem_email_verification(
+        &self,
+        token: &str,
+    ) -> Result<Option<EmailVerificationTable>, AuthError> {
+        DynamoDb::redeem_email_verification(self, token).await
+    }
+
+    async fn insert_password_reset_token(
+        &self,
+        token: &str,
+        user_id: &str,
+        ttl_seconds: i64,
+    ) -> Result<(), AuthError> {
+        DynamoDb::insert_password_reset_token(self, token, user_id, ttl_seconds).await
+    }
+
+    async fn redeem_password_reset_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<PasswordResetTable>, AuthError> {
+        DynamoDb::redeem_password_reset_token(self, token).await
     }
 
     async fn delete_user_by_id(&self, user_id: &str) -> Result<bool, AuthError> {
@@ -392,6 +476,54 @@ impl Database for memory::MemoryDb {
         memory::MemoryDb::update_password_hash(self, user_id, password_hash, updated_at).await
     }
 
+    async fn update_mfa_totp_secret(
+        &self,
+        user_id: &str,
+        mfa_totp_secret: Option<String>,
+        updated_at: &str,
+    ) -> Result<(), AuthError> {
+        memory::MemoryDb::update_mfa_totp_secret(self, user_id, mfa_totp_secret, updated_at).await
+    }
+
+    async fn insert_email_verification(
+        &self,
+        token: &str,
+        user_id: &str,
+        ttl_seconds: i64,
+    ) -> Result<(), AuthError> {
+        memory::MemoryDb::insert_email_verification(self, token, user_id, ttl_seconds).await
+    }
+
+    async fn get_email_verification_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<EmailVerificationTable>, AuthError> {
+        memory::MemoryDb::get_email_verification_by_user_id(self, user_id).await
+    }
+
+    async fn redeem_email_verification(
+        &self,
+        token: &str,
+    ) -> Result<Option<EmailVerificationTable>, AuthError> {
+        memory::MemoryDb::redeem_email_verification(self, token).await
+    }
+
+    async fn insert_password_reset_token(
+        &self,
+        token: &str,
+        user_id: &str,
+        ttl_seconds: i64,
+    ) -> Result<(), AuthError> {
+        memory::MemoryDb::insert_password_reset_token(self, token, user_id, ttl_seconds).await
+    }
+
+    async fn redeem_password_reset_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<PasswordResetTable>, AuthError> {
+        memory::MemoryDb::redeem_password_reset_token(self, token).await
+    }
+
     async fn delete_user_by_id(&self, user_id: &str) -> Result<bool, AuthError> {
         memory::MemoryDb::delete_user_by_id(self, user_id).await
     }
@@ -531,6 +663,10 @@ pub async fn dynamo() -> Arc<dyn Database> {
             .unwrap_or_else(|_| "SessionsTable".to_string()),
         sessions_user_id_index: env::var("SESSIONS_USER_ID_INDEX_NAME")
             .unwrap_or_else(|_| "userIdIndex".to_string()),
+        email_verifications_table: env::var("EMAIL_VERIFICATIONS_TABLE_NAME")
+            .unwrap_or_else(|_| "EmailVerificationsTable".to_string()),
+        password_resets_table: env::var("PASSWORD_RESETS_TABLE_NAME")
+            .unwrap_or_else(|_| "PasswordResetsTable".to_string()),
         refresh_tokens_table: env::var("REFRESH_TOKENS_TABLE_NAME")
             .unwrap_or_else(|_| "RefreshTokensTable".to_string()),
         credentials_table: env::var("CREDENTIALS_TABLE_NAME")

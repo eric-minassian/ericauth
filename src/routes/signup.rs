@@ -7,6 +7,7 @@ use axum::{
     Form,
 };
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::{
     audit::{append_event, auth_error_code, AuditEventInput, ERROR_CODE_KEY},
@@ -193,6 +194,12 @@ async fn try_signup(
     // Create user and session
     let user = create_user(state.db.as_ref(), normalized_email, body.password).await?;
 
+    let verification_token = generate_email_verification_token();
+    state
+        .db
+        .insert_email_verification(&verification_token, &user.id.to_string(), 60 * 60 * 24)
+        .await?;
+
     let session_token = generate_session_token()?;
 
     let session = create_session(
@@ -237,4 +244,8 @@ async fn try_signup(
     })?;
 
     Ok((response_headers, html).into_response())
+}
+
+fn generate_email_verification_token() -> String {
+    Uuid::new_v4().simple().to_string()
 }

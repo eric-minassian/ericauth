@@ -6,6 +6,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::audit::AuditEventRecord;
@@ -14,6 +15,8 @@ use crate::error::AuthError;
 use super::auth_code::AuthCodeTable;
 use super::client::ClientTable;
 use super::credential::CredentialTable;
+use super::email_verification::EmailVerificationTable;
+use super::password_reset::PasswordResetTable;
 use super::refresh_token::RefreshTokenTable;
 use super::session::NewSession;
 use super::session::SessionTable;
@@ -37,6 +40,9 @@ pub struct RateLimitRecord {
 struct MemoryDbSnapshot {
     users: HashMap<Uuid, UserTable>,
     sessions: HashMap<String, SessionTable>,
+    email_verifications: HashMap<String, EmailVerificationTable>,
+    #[serde(default)]
+    password_resets: HashMap<String, PasswordResetTable>,
     refresh_tokens: HashMap<String, RefreshTokenTable>,
     audit_events: Vec<AuditEventRecord>,
     credentials: HashMap<String, CredentialTable>,
@@ -52,6 +58,8 @@ struct MemoryDbSnapshot {
 pub struct MemoryDb {
     users: Arc<RwLock<HashMap<Uuid, UserTable>>>,
     sessions: Arc<RwLock<HashMap<String, SessionTable>>>,
+    email_verifications: Arc<RwLock<HashMap<String, EmailVerificationTable>>>,
+    password_resets: Arc<RwLock<HashMap<String, PasswordResetTable>>>,
     refresh_tokens: Arc<RwLock<HashMap<String, RefreshTokenTable>>>,
     audit_events: Arc<RwLock<Vec<AuditEventRecord>>>,
     credentials: Arc<RwLock<HashMap<String, CredentialTable>>>,
@@ -79,6 +87,8 @@ impl MemoryDb {
         Self {
             users: Arc::new(RwLock::new(snapshot.users)),
             sessions: Arc::new(RwLock::new(snapshot.sessions)),
+            email_verifications: Arc::new(RwLock::new(snapshot.email_verifications)),
+            password_resets: Arc::new(RwLock::new(snapshot.password_resets)),
             refresh_tokens: Arc::new(RwLock::new(snapshot.refresh_tokens)),
             audit_events: Arc::new(RwLock::new(snapshot.audit_events)),
             credentials: Arc::new(RwLock::new(snapshot.credentials)),
@@ -119,6 +129,16 @@ impl MemoryDb {
                 .clone(),
             sessions: self
                 .sessions
+                .read()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
+                .clone(),
+            email_verifications: self
+                .email_verifications
+                .read()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
+                .clone(),
+            password_resets: self
+                .password_resets
                 .read()
                 .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?
                 .clone(),
@@ -215,6 +235,7 @@ impl MemoryDb {
                     updated_at,
                     scopes,
                     recovery_codes,
+                    mfa_totp_secret: None,
                 },
             );
 
@@ -357,6 +378,156 @@ impl MemoryDb {
 
         self.persist_if_configured()?;
         Ok(())
+    }
+
+    pub async fn update_mfa_totp_secret(
+        &self,
+        user_id: &str,
+        mfa_totp_secret: Option<String>,
+        updated_at: &str,
+    ) -> Result<(), AuthError> {
+        let user_uuid = Uuid::parse_str(user_id)
+            .map_err(|e| AuthError::Internal(format!("Invalid user ID: {e}")))?;
+
+        {
+            let mut users = self
+                .users
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+            let user = users
+                .get_mut(&user_uuid)
+                .ok_or_else(|| AuthError::NotFound("user not found".to_string()))?;
+
+            user.mfa_totp_secret = mfa_totp_secret;
+            user.updated_at = updated_at.to_string();
+        }
+
+        self.persist_if_configured()?;
+        Ok(())
+    }
+
+    pub async fn insert_email_verification(
+        &self,
+        token: &str,
+        user_id: &str,
+        ttl_seconds: i64,
+    ) -> Result<(), AuthError> {
+        let expires_at = chrono::Utc::now().timestamp() + ttl_seconds;
+        let token_hash = hash_email_verification_token(token);
+
+        {
+            let mut verifications = self
+                .email_verifications
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+            verifications.insert(
+                token_hash.clone(),
+                EmailVerificationTable {
+                    token: token_hash,
+                    user_id: user_id.to_string(),
+                    expires_at,
+                },
+            );
+        }
+
+        self.persist_if_configured()?;
+        Ok(())
+    }
+
+    pub async fn get_email_verification_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<EmailVerificationTable>, AuthError> {
+        let verifications = self
+            .email_verifications
+            .read()
+            .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+        Ok(verifications
+            .values()
+            .find(|record| record.user_id == user_id)
+            .cloned())
+    }
+
+    pub async fn redeem_email_verification(
+        &self,
+        token: &str,
+    ) -> Result<Option<EmailVerificationTable>, AuthError> {
+        let token_hash = hash_email_verification_token(token);
+        let record = {
+            let mut verifications = self
+                .email_verifications
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+            verifications.remove(&token_hash)
+        };
+
+        if record.is_some() {
+            self.persist_if_configured()?;
+        }
+
+        match record {
+            Some(verification) if verification.expires_at > chrono::Utc::now().timestamp() => {
+                Ok(Some(verification))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    pub async fn insert_password_reset_token(
+        &self,
+        token: &str,
+        user_id: &str,
+        ttl_seconds: i64,
+    ) -> Result<(), AuthError> {
+        let expires_at = chrono::Utc::now().timestamp() + ttl_seconds;
+        let token_hash = hash_password_reset_token(token);
+
+        {
+            let mut resets = self
+                .password_resets
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+            resets.insert(
+                token_hash.clone(),
+                PasswordResetTable {
+                    token: token_hash,
+                    user_id: user_id.to_string(),
+                    expires_at,
+                },
+            );
+        }
+
+        self.persist_if_configured()?;
+        Ok(())
+    }
+
+    pub async fn redeem_password_reset_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<PasswordResetTable>, AuthError> {
+        let token_hash = hash_password_reset_token(token);
+        let record = {
+            let mut resets = self
+                .password_resets
+                .write()
+                .map_err(|e| AuthError::Internal(format!("Lock error: {e}")))?;
+
+            resets.remove(&token_hash)
+        };
+
+        if record.is_some() {
+            self.persist_if_configured()?;
+        }
+
+        match record {
+            Some(reset) if reset.expires_at > chrono::Utc::now().timestamp() => Ok(Some(reset)),
+            _ => Ok(None),
+        }
     }
 
     pub async fn insert_session(&self, new_session: NewSession) -> Result<(), AuthError> {
@@ -823,6 +994,14 @@ impl MemoryDb {
         self.persist_if_configured()?;
         Ok(new_count)
     }
+}
+
+fn hash_email_verification_token(token: &str) -> String {
+    hex::encode(Sha256::digest(token.as_bytes()))
+}
+
+fn hash_password_reset_token(token: &str) -> String {
+    hex::encode(Sha256::digest(token.as_bytes()))
 }
 
 impl Default for MemoryDb {

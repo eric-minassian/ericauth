@@ -18,6 +18,10 @@ mod passkeys_page;
 mod recover;
 mod recover_page;
 mod reset_password;
+mod saml_metadata;
+mod scim_auth;
+mod scim_groups;
+mod scim_users;
 mod signup;
 mod signup_page;
 mod token;
@@ -30,7 +34,7 @@ use std::env;
 use axum::{
     http::{HeaderValue, Method},
     middleware,
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -71,7 +75,13 @@ pub fn router(state: AppState) -> Router {
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::list(cors_allowed_origins))
-        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::OPTIONS,
+        ])
         .allow_headers([
             axum::http::header::CONTENT_TYPE,
             axum::http::header::AUTHORIZATION,
@@ -86,6 +96,23 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/.well-known/openid-configuration",
             get(openid_config::handler),
+        )
+        .route(
+            "/.well-known/saml/sp-metadata",
+            get(saml_metadata::sp_handler),
+        )
+        .route(
+            "/.well-known/saml/idp-metadata",
+            get(saml_metadata::idp_handler),
+        )
+        .route(
+            "/scim/v2/Groups",
+            get(scim_groups::list_handler).post(scim_groups::create_handler),
+        )
+        .route("/scim/v2/Users", post(scim_users::create_handler))
+        .route(
+            "/scim/v2/Users/{id}",
+            put(scim_users::update_handler).patch(scim_users::patch_handler),
         )
         .route("/userinfo", get(userinfo::handler).post(userinfo::handler))
         .layer(cors);

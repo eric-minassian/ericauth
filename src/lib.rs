@@ -10,6 +10,7 @@ pub mod oauth;
 pub mod password;
 pub mod refresh_token;
 pub mod routes;
+pub mod saml;
 pub mod session;
 pub mod state;
 pub mod templates;

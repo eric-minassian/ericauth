@@ -1,6 +1,7 @@
 mod account;
 mod admin_pages;
 mod admin_tenants;
+mod api_keys;
 mod audit_events;
 pub(crate) mod authorize;
 mod compliance;
@@ -17,6 +18,7 @@ mod mfa;
 mod openid_config;
 mod passkey;
 mod passkeys_page;
+mod policy_simulate;
 mod recover;
 mod recover_page;
 mod reset_password;
@@ -229,6 +231,11 @@ pub fn router(state: AppState) -> Router {
             "/mfa/setup",
             get(mfa::setup_get_handler).post(mfa::setup_post_handler),
         )
+        .route(
+            "/account/api-keys",
+            get(api_keys::list_handler).post(api_keys::create_handler),
+        )
+        .route("/account/api-keys/revoke", post(api_keys::revoke_handler))
         .route("/passkeys/register/begin", post(passkey::register_begin))
         .route(
             "/passkeys/register/complete",
@@ -236,7 +243,8 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/passkeys/auth/complete", post(passkey::auth_complete))
         .route("/passkeys/delete", post(passkey::delete))
-        .route("/authorize", get(authorize::handler));
+        .route("/authorize", get(authorize::handler))
+        .route("/policy/simulate", post(policy_simulate::handler));
 
     Router::new()
         .merge(cors_routes)

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Compliance - EricAuth{% endblock %}
+
+{% block content %}
+<h1>Compliance</h1>
+<p class="subtitle">Export account data, review evidence, or request account deletion.</p>
+
+{% if let Some(msg) = notice %}
+<div class="success-msg">{{ msg }}</div>
+{% endif %}
+{% if let Some(msg) = error %}
+<div class="error-msg">{{ msg }}</div>
+{% endif %}
+
+<div class="actions">
+    <form method="POST" action="/account/compliance/export">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-secondary">Generate account export</button>
+    </form>
+
+    {% if can_view_audit_evidence %}
+    <form method="POST" action="/account/compliance/audit-evidence">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-secondary">Load audit evidence</button>
+    </form>
+    {% endif %}
+</div>
+
+{% if let Some(export_json) = export_data %}
+<hr class="divider">
+<h2 style="font-size: 0.95rem; margin-bottom: 0.5rem;">Account export</h2>
+<pre style="white-space: pre-wrap; font-size: 0.75rem; color: #d4d4d8; background: #09090b; border: 1px solid #25252b; border-radius: 8px; padding: 0.75rem;">{{ export_json }}</pre>
+{% endif %}
+
+{% if let Some(evidence_json) = audit_evidence %}
+<hr class="divider">
+<h2 style="font-size: 0.95rem; margin-bottom: 0.5rem;">Audit evidence</h2>
+<pre style="white-space: pre-wrap; font-size: 0.75rem; color: #d4d4d8; background: #09090b; border: 1px solid #25252b; border-radius: 8px; padding: 0.75rem;">{{ evidence_json }}</pre>
+{% endif %}
+
+<hr class="divider">
+<h2 style="font-size: 0.95rem; color: #fca5a5; margin-bottom: 0.5rem;">Delete account</h2>
+<p class="subtitle" style="margin-top: 0;">This deletes your account, sessions, passkeys, and refresh tokens.</p>
+<form method="POST" action="/account/compliance/delete">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="confirm">Type DELETE to confirm</label>
+    <input id="confirm" type="text" name="confirm" required autocomplete="off">
+    <button type="submit" class="btn btn-danger">Delete account</button>
+</form>
+{% endblock %}

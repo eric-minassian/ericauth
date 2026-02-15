@@ -27,6 +27,13 @@ const CSRF_PROTECTED_PATHS: &[&str] = &[
     "/account/sessions/revoke-others",
     "/account/password",
     "/account/recovery-codes/regenerate",
+    "/account/api-keys/manage",
+    "/account/api-keys/manage/create",
+    "/account/api-keys/manage/revoke",
+    "/account/compliance",
+    "/account/compliance/export",
+    "/account/compliance/delete",
+    "/account/compliance/audit-evidence",
     "/admin/console/tenants",
 ];
 

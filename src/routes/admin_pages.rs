@@ -7,7 +7,8 @@ use axum::{
 use serde::Deserialize;
 
 use crate::{
-    db::tenant::TenantTable,
+    authz::{evaluate_policy, PolicyDecisionRequest},
+    db::{tenant::TenantTable, user::UserTable},
     error::AuthError,
     middleware::{auth::AuthenticatedUser, csrf::CsrfToken},
     state::AppState,
@@ -20,6 +21,26 @@ const TENANT_ADMIN_SCOPES: &[&str] = &["admin", "admin:tenants"];
 pub struct AdminQuery {
     notice: Option<String>,
     error: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct ClientsQuery {
+    tenant_id: Option<String>,
+    client_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UsersQuery {
+    user_id: Option<String>,
+    email: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct PoliciesQuery {
+    principal: Option<String>,
+    action: Option<String>,
+    resource: Option<String>,
+    scopes: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -41,15 +62,57 @@ struct AdminTenantsTemplate {
 
 #[derive(Template)]
 #[template(path = "admin_clients.html")]
-struct AdminClientsTemplate {}
+struct AdminClientsTemplate {
+    tenants: Vec<TenantTable>,
+    tenant_id: Option<String>,
+    client_id: Option<String>,
+    lookup_result: Option<ClientLookupView>,
+    error: Option<String>,
+}
 
 #[derive(Template)]
 #[template(path = "admin_users.html")]
-struct AdminUsersTemplate {}
+struct AdminUsersTemplate {
+    user_id: Option<String>,
+    email: Option<String>,
+    lookup_result: Option<UserLookupView>,
+    error: Option<String>,
+}
 
 #[derive(Template)]
 #[template(path = "admin_policies.html")]
-struct AdminPoliciesTemplate {}
+struct AdminPoliciesTemplate {
+    principal: Option<String>,
+    action: Option<String>,
+    resource: Option<String>,
+    scopes: Option<String>,
+    decision: Option<PolicyDecisionView>,
+    error: Option<String>,
+}
+
+struct ClientLookupView {
+    client_id: String,
+    client_name: String,
+    redirect_uris: String,
+    allowed_scopes: String,
+    token_endpoint_auth_method: String,
+}
+
+struct UserLookupView {
+    id: String,
+    email: String,
+    created_at: String,
+    updated_at: String,
+    scopes: String,
+    has_password_login: bool,
+    has_mfa: bool,
+}
+
+struct PolicyDecisionView {
+    allowed: bool,
+    required_scope: Option<String>,
+    reason: String,
+}
 
 pub async fn tenants_page_handler(
     Extension(csrf): Extension<CsrfToken>,
@@ -86,25 +149,162 @@ pub async fn create_tenant_handler(
 pub async fn clients_page_handler(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    Query(query): Query<ClientsQuery>,
 ) -> Result<impl IntoResponse, AuthError> {
     require_admin_access(&state, &user).await?;
-    render(&AdminClientsTemplate {})
+
+    let tenants = state.db.list_tenants().await?;
+    let tenant_id = trim_optional(query.tenant_id);
+    let client_id = trim_optional(query.client_id);
+
+    let (lookup_result, error) = if let Some(ref requested_client_id) = client_id {
+        let client = state
+            .db
+            .get_client_for_tenant(tenant_id.as_deref(), requested_client_id)
+            .await?;
+
+        match client {
+            Some(client) => (
+                Some(ClientLookupView {
+                    client_id: client.client_id,
+                    client_name: client.client_name,
+                    redirect_uris: client.redirect_uris.join(", "),
+                    allowed_scopes: client.allowed_scopes.join(" "),
+                    token_endpoint_auth_method: client.token_endpoint_auth_method,
+                }),
+                None,
+            ),
+            None => (
+                None,
+                Some("Client not found for this tenant scope.".to_string()),
+            ),
+        }
+    } else {
+        (None, None)
+    };
+
+    render(&AdminClientsTemplate {
+        tenants,
+        tenant_id,
+        client_id,
+        lookup_result,
+        error,
+    })
 }
 
 pub async fn users_page_handler(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    Query(query): Query<UsersQuery>,
 ) -> Result<impl IntoResponse, AuthError> {
     require_admin_access(&state, &user).await?;
-    render(&AdminUsersTemplate {})
+
+    let user_id = trim_optional(query.user_id);
+    let email = trim_optional(query.email);
+    let (lookup_result, error) = lookup_user(&state, user_id.as_deref(), email.as_deref()).await?;
+
+    render(&AdminUsersTemplate {
+        user_id,
+        email,
+        lookup_result,
+        error,
+    })
 }
 
 pub async fn policies_page_handler(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    Query(query): Query<PoliciesQuery>,
 ) -> Result<impl IntoResponse, AuthError> {
     require_admin_access(&state, &user).await?;
-    render(&AdminPoliciesTemplate {})
+
+    let principal = trim_optional(query.principal);
+    let action = trim_optional(query.action);
+    let resource = trim_optional(query.resource);
+    let scopes = trim_optional(query.scopes);
+
+    let (decision, error) = match (&action, &resource) {
+        (Some(action), Some(resource)) => {
+            let principal_value = principal
+                .clone()
+                .unwrap_or_else(|| "admin-console-principal".to_string());
+            let scope_values = scopes
+                .clone()
+                .unwrap_or_default()
+                .split_whitespace()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>();
+            let scope_refs = scope_values.iter().map(String::as_str).collect::<Vec<_>>();
+
+            let decision = evaluate_policy(&PolicyDecisionRequest {
+                principal: &principal_value,
+                action,
+                resource,
+                scopes: &scope_refs,
+            });
+
+            (
+                Some(PolicyDecisionView {
+                    allowed: decision.allowed,
+                    required_scope: decision.required_scope.map(ToString::to_string),
+                    reason: decision.reason.to_string(),
+                }),
+                None,
+            )
+        }
+        (Some(_), None) | (None, Some(_)) => (
+            None,
+            Some("Provide both action and resource to run simulation.".to_string()),
+        ),
+        (None, None) => (None, None),
+    };
+
+    render(&AdminPoliciesTemplate {
+        principal,
+        action,
+        resource,
+        scopes,
+        decision,
+        error,
+    })
+}
+
+async fn lookup_user(
+    state: &AppState,
+    user_id: Option<&str>,
+    email: Option<&str>,
+) -> Result<(Option<UserLookupView>, Option<String>), AuthError> {
+    let user = if let Some(id) = user_id {
+        state.db.get_user_by_id(id).await?
+    } else if let Some(value) = email {
+        state.db.get_user_by_email(value.to_string()).await?
+    } else {
+        return Ok((None, None));
+    };
+
+    let Some(user) = user else {
+        return Ok((None, Some("User not found.".to_string())));
+    };
+
+    Ok((Some(to_user_lookup_view(user)), None))
+}
+
+fn to_user_lookup_view(user: UserTable) -> UserLookupView {
+    UserLookupView {
+        id: user.id.to_string(),
+        email: user.email,
+        created_at: user.created_at,
+        updated_at: user.updated_at,
+        scopes: user.scopes.join(" "),
+        has_password_login: user.password_hash.is_some(),
+        has_mfa: user.mfa_totp_secret.is_some(),
+    }
+}
+
+fn trim_optional(value: Option<String>) -> Option<String> {
+    value
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
 }
 
 async fn try_create_tenant(

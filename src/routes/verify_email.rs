@@ -63,7 +63,7 @@ async fn try_verify_email(state: AppState, query: VerifyEmailQuery) -> Result<Re
             .await?;
     }
 
-    Ok(Redirect::to("/login?verified=1").into_response())
+    Ok(Redirect::to("/login?notice=email_verified").into_response())
 }
 
 #[cfg(test)]
@@ -171,6 +171,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let location = response
+            .headers()
+            .get(axum::http::header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(location.contains("notice=email_verified"));
 
         let updated_user = state
             .db

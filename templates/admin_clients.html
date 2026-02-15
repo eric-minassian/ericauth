@@ -7,13 +7,47 @@
 <h1>Admin Console</h1>
 <p class="subtitle">Clients</p>
 
-<div class="actions">
+<div class="actions" style="flex-direction: row; flex-wrap: wrap; margin-bottom: 1rem;">
     <a class="btn btn-secondary btn-sm" href="/admin/console/tenants">Tenants</a>
     <a class="btn btn-secondary btn-sm" href="/admin/console/clients">Clients</a>
     <a class="btn btn-secondary btn-sm" href="/admin/console/users">Users</a>
     <a class="btn btn-secondary btn-sm" href="/admin/console/policies">Policies</a>
 </div>
 
+{% if let Some(msg) = error %}
+<div class="error-msg">{{ msg }}</div>
+{% endif %}
+
+<form method="GET" action="/admin/console/clients">
+    <label for="tenant_id">Tenant ID (optional)</label>
+    <input id="tenant_id" type="text" name="tenant_id" placeholder="tenant-a" {% if let Some(value) = tenant_id %}value="{{ value }}"{% endif %}>
+    <label for="client_id">Client ID</label>
+    <input id="client_id" type="text" name="client_id" placeholder="my-client" {% if let Some(value) = client_id %}value="{{ value }}"{% endif %}>
+    <button type="submit" class="btn btn-primary">Lookup client</button>
+</form>
+
+{% if let Some(client) = lookup_result %}
 <hr class="divider">
-<p class="subtitle">Client management page scaffolded for Task 10.</p>
+<h2 style="font-size: 0.95rem; margin-bottom: 0.5rem;">Client details</h2>
+<p><strong>ID:</strong> {{ client.client_id }}</p>
+<p><strong>Name:</strong> {{ client.client_name }}</p>
+<p><strong>Redirect URIs:</strong> {{ client.redirect_uris }}</p>
+<p><strong>Allowed scopes:</strong> {{ client.allowed_scopes }}</p>
+<p><strong>Token auth:</strong> {{ client.token_endpoint_auth_method }}</p>
+{% endif %}
+
+<hr class="divider">
+<h2 style="font-size: 0.95rem; margin-bottom: 0.5rem;">Tenant inventory</h2>
+{% if tenants.len() == 0 %}
+<p class="subtitle">No tenants available.</p>
+{% else %}
+<ul style="list-style: none; border: 1px solid #25252b; border-radius: 8px;">
+    {% for tenant in tenants %}
+    <li style="padding: 0.625rem 0.75rem; border-top: 1px solid #25252b;">
+        <div style="font-size: 0.9rem; color: #fafafa;">{{ tenant.tenant_id }} - {{ tenant.name }}</div>
+        <div style="font-size: 0.8rem; color: #a1a1aa;">Projects: {{ tenant.projects.len() }}</div>
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
 {% endblock %}

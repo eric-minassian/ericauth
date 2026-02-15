@@ -9,6 +9,9 @@
 {% if let Some(err) = error %}
 <div class="error-msg">{{ err }}</div>
 {% endif %}
+{% if let Some(msg) = notice %}
+<div class="success-msg">{{ msg }}</div>
+{% endif %}
 
 <form method="POST" action="/login">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

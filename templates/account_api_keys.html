@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}API keys - EricAuth{% endblock %}
+
+{% block content %}
+<h1>API keys</h1>
+<p class="subtitle">Create personal API keys for scripts and automation.</p>
+
+{% if let Some(msg) = notice %}
+<div class="success-msg">{{ msg }}</div>
+{% endif %}
+{% if let Some(msg) = error %}
+<div class="error-msg">{{ msg }}</div>
+{% endif %}
+
+{% if let Some(api_key) = newly_created_key %}
+<div class="success-msg">
+    <strong>New API key</strong><br>
+    <code>{{ api_key }}</code>
+</div>
+{% endif %}
+
+<form method="POST" action="/account/api-keys/manage/create">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="name">Key name</label>
+    <input id="name" type="text" name="name" placeholder="CI deploy key" required>
+    <button type="submit" class="btn btn-primary">Create API key</button>
+</form>
+
+<hr class="divider">
+
+<h2 style="font-size: 0.95rem; margin-bottom: 0.75rem;">Existing keys</h2>
+{% if api_keys.len() == 0 %}
+<p class="subtitle">No API keys created yet.</p>
+{% else %}
+<div class="actions">
+    {% for key in api_keys %}
+    <div style="border: 1px solid #25252b; border-radius: 8px; padding: 0.75rem;">
+        <div style="font-size: 0.9rem; color: #fafafa;">{{ key.name }}</div>
+        <div style="font-size: 0.8rem; color: #71717a; margin-bottom: 0.5rem;">{{ key.key_id }}</div>
+        <div style="font-size: 0.8rem; color: #a1a1aa;">Created: {{ key.created_at }}</div>
+        {% if let Some(last_used_at) = key.last_used_at %}
+        <div style="font-size: 0.8rem; color: #a1a1aa;">Last used: {{ last_used_at }}</div>
+        {% endif %}
+        {% if let Some(revoked_at) = key.revoked_at %}
+        <div style="font-size: 0.8rem; color: #fca5a5;">Revoked: {{ revoked_at }}</div>
+        {% else %}
+        <form method="POST" action="/account/api-keys/manage/revoke" style="margin-top: 0.5rem;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="key_id" value="{{ key.key_id }}">
+            <button type="submit" class="btn btn-danger btn-sm">Revoke key</button>
+        </form>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

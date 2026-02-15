@@ -204,6 +204,19 @@ pub fn router(state: AppState) -> Router {
             "/compliance/audit/evidence",
             get(compliance::audit_evidence_handler),
         )
+        .route("/account/compliance", get(compliance::page_handler))
+        .route(
+            "/account/compliance/export",
+            post(compliance::export_form_handler),
+        )
+        .route(
+            "/account/compliance/delete",
+            post(compliance::delete_form_handler),
+        )
+        .route(
+            "/account/compliance/audit-evidence",
+            post(compliance::audit_evidence_form_handler),
+        )
         .route(
             "/consent",
             get(consent::get_handler).post(consent::post_handler),
@@ -236,6 +249,15 @@ pub fn router(state: AppState) -> Router {
             get(api_keys::list_handler).post(api_keys::create_handler),
         )
         .route("/account/api-keys/revoke", post(api_keys::revoke_handler))
+        .route("/account/api-keys/manage", get(api_keys::page_handler))
+        .route(
+            "/account/api-keys/manage/create",
+            post(api_keys::create_form_handler),
+        )
+        .route(
+            "/account/api-keys/manage/revoke",
+            post(api_keys::revoke_form_handler),
+        )
         .route("/passkeys/register/begin", post(passkey::register_begin))
         .route(
             "/passkeys/register/complete",

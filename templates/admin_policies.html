@@ -7,13 +7,36 @@
 <h1>Admin Console</h1>
 <p class="subtitle">Policies</p>
 
-<div class="actions">
+<div class="actions" style="flex-direction: row; flex-wrap: wrap; margin-bottom: 1rem;">
     <a class="btn btn-secondary btn-sm" href="/admin/console/tenants">Tenants</a>
     <a class="btn btn-secondary btn-sm" href="/admin/console/clients">Clients</a>
     <a class="btn btn-secondary btn-sm" href="/admin/console/users">Users</a>
     <a class="btn btn-secondary btn-sm" href="/admin/console/policies">Policies</a>
 </div>
 
+{% if let Some(msg) = error %}
+<div class="error-msg">{{ msg }}</div>
+{% endif %}
+
+<form method="GET" action="/admin/console/policies">
+    <label for="principal">Principal</label>
+    <input id="principal" type="text" name="principal" placeholder="service-account" {% if let Some(value) = principal %}value="{{ value }}"{% endif %}>
+    <label for="action">Action</label>
+    <input id="action" type="text" name="action" placeholder="read" {% if let Some(value) = action %}value="{{ value }}"{% endif %}>
+    <label for="resource">Resource</label>
+    <input id="resource" type="text" name="resource" placeholder="account" {% if let Some(value) = resource %}value="{{ value }}"{% endif %}>
+    <label for="scopes">Scopes (space-separated)</label>
+    <input id="scopes" type="text" name="scopes" placeholder="api:read audit:read" {% if let Some(value) = scopes %}value="{{ value }}"{% endif %}>
+    <button type="submit" class="btn btn-primary">Run simulation</button>
+</form>
+
+{% if let Some(result) = decision %}
 <hr class="divider">
-<p class="subtitle">Policy management page scaffolded for Task 10.</p>
+<h2 style="font-size: 0.95rem; margin-bottom: 0.5rem;">Decision</h2>
+<p><strong>Allowed:</strong> {% if result.allowed %}Yes{% else %}No{% endif %}</p>
+{% if let Some(scope) = result.required_scope %}
+<p><strong>Required scope:</strong> {{ scope }}</p>
+{% endif %}
+<p><strong>Reason:</strong> {{ result.reason }}</p>
+{% endif %}
 {% endblock %}

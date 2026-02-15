@@ -89,10 +89,25 @@ test("creates password resets table with TTL", () => {
   });
 });
 
-test("creates exactly 12 DynamoDB tables", () => {
+test("creates api keys table with user id GSI", () => {
+  const template = createTestStack();
+
+  template.hasResourceProperties("AWS::DynamoDB::GlobalTable", {
+    TableName: "ericauth-test-api-keys",
+    KeySchema: [{ AttributeName: "key_id", KeyType: "HASH" }],
+    GlobalSecondaryIndexes: [
+      Match.objectLike({
+        IndexName: "userIdIndex",
+        KeySchema: [{ AttributeName: "user_id", KeyType: "HASH" }],
+      }),
+    ],
+  });
+});
+
+test("creates exactly 13 DynamoDB tables", () => {
   const template = createTestStack();
   const tables = template.findResources("AWS::DynamoDB::GlobalTable");
-  expect(Object.keys(tables).length).toBe(12);
+  expect(Object.keys(tables).length).toBe(13);
 });
 
 // --- Lambda ---
@@ -106,6 +121,7 @@ test("creates Lambda function with table name env vars", () => {
         USERS_TABLE_NAME: Match.anyValue(),
         SESSIONS_TABLE_NAME: Match.anyValue(),
         REFRESH_TOKENS_TABLE_NAME: Match.anyValue(),
+        API_KEYS_TABLE_NAME: Match.anyValue(),
         EMAIL_VERIFICATIONS_TABLE_NAME: Match.anyValue(),
         PASSWORD_RESETS_TABLE_NAME: Match.anyValue(),
         AUDIT_EVENTS_TABLE_NAME: Match.anyValue(),

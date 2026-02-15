@@ -13,6 +13,7 @@ export class Database extends Construct {
   public readonly emailVerificationsTable: TableV2;
   public readonly passwordResetsTable: TableV2;
   public readonly refreshTokensTable: TableV2;
+  public readonly apiKeysTable: TableV2;
   public readonly auditEventsTable: TableV2;
   public readonly credentialsTable: TableV2;
   public readonly challengesTable: TableV2;
@@ -77,6 +78,18 @@ export class Database extends Construct {
       tableName: `${prefix}-refresh-tokens`,
       partitionKey: { name: "token_hash", type: AttributeType.STRING },
       timeToLiveAttribute: "expires_at",
+      removalPolicy,
+    });
+
+    this.apiKeysTable = new TableV2(this, "ApiKeysTable", {
+      tableName: `${prefix}-api-keys`,
+      partitionKey: { name: "key_id", type: AttributeType.STRING },
+      globalSecondaryIndexes: [
+        {
+          indexName: GSI_NAMES.USER_ID_INDEX,
+          partitionKey: { name: "user_id", type: AttributeType.STRING },
+        },
+      ],
       removalPolicy,
     });
 

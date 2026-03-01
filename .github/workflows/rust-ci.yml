@@ -40,7 +40,7 @@ jobs:
           use-sccache: "true"
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2.67.30
+        uses: taiki-e/install-action@v2.68.15
         with:
           tool: cargo-nextest
 
